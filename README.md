@@ -217,3 +217,7 @@ npm run cleanup:images -w server
 ```
 
 Tests use real MongoDB transactions and image decoding with a mocked Cloudinary transport. They do not establish that a particular live Cloudinary account is configured correctly; perform the provider smoke check in the linked guide after supplying credentials. No `.env` secrets are modified by tests.
+
+## Production-readiness audit
+
+See [the production-readiness report](docs/production-readiness-audit.md) for verified feature coverage, remaining release blockers, cookie/domain recommendations, job scheduling and exact build/start prerequisites. The audit does not deploy the application. Cloudinary provider setup and hosted authentication verification remain manual.

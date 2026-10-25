@@ -262,6 +262,11 @@ export default function DashboardPage() {
           </div>
         </header>
         <main id="dashboard-main" className="dashboard-main">
+          {error && (
+            <p className="form-alert" role="alert">
+              {error}
+            </p>
+          )}
           {outlet || (
             <>
               <section id="overview" className="dashboard-welcome">
@@ -275,11 +280,6 @@ export default function DashboardPage() {
                   Verification: {user.verificationStatus}
                 </span>
               </section>
-              {error && (
-                <p className="form-alert" role="alert">
-                  {error}
-                </p>
-              )}
               <div className="dashboard-section-title">
                 <h2>Your workspace</h2>
                 <span className="coming-label">

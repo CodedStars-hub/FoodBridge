@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import mongoose from 'mongoose';
 import {
   cloudinaryEnabled,
@@ -155,6 +156,7 @@ export async function edit(req, res) {
   });
 }
 export async function cancel(req, res) {
+  validate(z.strictObject({}), req.body);
   res.json({
     donation: donationView(
       await cancelDonation(req.params.id, req.user),

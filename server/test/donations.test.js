@@ -1945,3 +1945,20 @@ describe('authenticated managed image uploads with isolated Cloudinary adapter',
     await inventory(d._id, 10, 0);
   });
 });
+
+describe('audit input hardening', () => {
+  it('rejects unexpected cancellation fields before changing a listing', async () => {
+    const d = await donation();
+    const response = await call(
+      'post',
+      `/api/donations/${d._id}/cancel`,
+      'donor',
+      { status: 'completed' },
+    );
+    expect(response.status).toBe(400);
+    expect((await Donation.findById(d._id)).status).toBe('available');
+    expect((await call('post', `/api/donations/${d._id}/cancel`)).status).toBe(
+      200,
+    );
+  });
+});

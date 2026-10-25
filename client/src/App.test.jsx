@@ -297,6 +297,22 @@ describe('sessions and role-based navigation', () => {
       expect.objectContaining({ method: 'POST', credentials: 'include' }),
     );
   });
+  it('shows logout failures from a dashboard subpage without losing the session', async () => {
+    fetch.mockResolvedValueOnce(reply({ user: donor }));
+    fetch.mockResolvedValueOnce(
+      reply({ items: [], unreadCount: 0, pagination: { page: 1, pages: 0 } }),
+    );
+    renderPage('/dashboard/donor/notifications');
+    await screen.findByRole('heading', { name: 'Notification center' });
+    fetch.mockRejectedValueOnce(new Error('offline'));
+    fireEvent.click(screen.getByRole('button', { name: 'Log out' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Unable to log out',
+    );
+    expect(
+      screen.getByRole('heading', { name: 'Notification center' }),
+    ).toBeInTheDocument();
+  });
   it('retains the session and offers feedback if logout fails', async () => {
     fetch.mockResolvedValueOnce(reply({ user: donor }));
     renderPage('/dashboard');
