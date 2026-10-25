@@ -1,0 +1,29 @@
+{
+  "name": "@foodbridge/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "build": "node --check src/index.js && node --check src/app.js",
+    "test": "vitest run",
+    "bootstrap:admin": "node scripts/bootstrapAdmin.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "mongoose": "^8.19.2",
+    "zod": "^4.1.12",
+    "bcryptjs": "^3.0.2",
+    "jsonwebtoken": "^9.0.2",
+    "cookie-parser": "^1.4.7",
+    "express-rate-limit": "^8.2.1"
+  },
+  "devDependencies": {
+    "supertest": "^7.1.4",
+    "vitest": "^5.0.5"
+  }
+}

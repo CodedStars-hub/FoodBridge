@@ -1,0 +1,1 @@
+User contains account identity, private credentials, role, verification state, and a private session version used for logout revocation. Domain models for food redistribution will be introduced in later milestones.
