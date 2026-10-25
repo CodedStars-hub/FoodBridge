@@ -1,3 +1,6 @@
+vi.mock('./components/NotificationBell.jsx', () => ({
+  default: () => null,
+}));
 import {
   beforeAll,
   afterAll,

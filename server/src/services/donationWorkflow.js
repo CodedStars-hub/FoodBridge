@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { notifyRequest } from './notificationService.js';
 import {
   cancelPickup,
   pickupHandover,
@@ -72,6 +73,15 @@ export async function editDonation(id, user, input) {
         409,
         'Edits are locked while requests are active or after any receipt. Resolve active requests before editing',
       );
+    if (
+      donation.image?.publicId &&
+      Object.hasOwn(input, 'imageUrl') &&
+      input.imageUrl !== donation.image.secureUrl
+    )
+      fail(
+        409,
+        'Use the image upload endpoint to replace or remove a managed image',
+      );
     Object.assign(donation, input);
     if (
       donation.preparationTime > new Date() ||
@@ -95,6 +105,10 @@ export async function cancelDonation(id, user) {
         409,
         'Resolve accepted or handed-over reservations before cancelling the donation',
       );
+    const affected = await DonationRequest.find({
+      donation: id,
+      status: 'pending',
+    }).session(session);
     donation.status = 'cancelled';
     donation.workflowVersion += 1;
     await donation.save({ session });
@@ -109,6 +123,18 @@ export async function cancelDonation(id, user) {
       },
       { session },
     );
+    for (const previous of affected) {
+      const current = await DonationRequest.findById(previous._id).session(
+        session,
+      );
+      await notifyRequest(
+        current,
+        donation,
+        user,
+        'donation_cancelled',
+        session,
+      );
+    }
     return donation;
   });
 }
@@ -135,6 +161,7 @@ export async function submitRequest(id, user, input) {
       [{ donation: id, ngo: user._id, ...input, unit: donation.unit }],
       { session },
     );
+    await notifyRequest(request, donation, user, 'request_created', session);
     return request;
   });
 }
@@ -191,11 +218,13 @@ export async function transitionRequest(id, user, action) {
           'Not enough inventory remains, or the pickup deadline has passed',
         );
       request.status = 'accepted';
+      request.acceptedAt = new Date();
     } else {
       if (action === 'handover') {
         open(donation);
         await pickupHandover(request, user, session);
         request.status = 'handed_over';
+        request.handedOverAt = new Date();
       }
       if (action === 'reject') request.status = 'rejected';
       if (action === 'cancel') {
@@ -211,8 +240,13 @@ export async function transitionRequest(id, user, action) {
         donation.reservedQuantity -= request.requestedQuantity;
         donation.completedQuantity += request.requestedQuantity;
         request.status = 'completed';
+        request.receivedAt = new Date();
         if (donation.completedQuantity === donation.quantity) {
           donation.status = 'completed';
+          const pendingOthers = await DonationRequest.find({
+            donation: donation._id,
+            status: 'pending',
+          }).session(session);
           await DonationRequest.updateMany(
             { donation: donation._id, status: 'pending' },
             {
@@ -224,6 +258,19 @@ export async function transitionRequest(id, user, action) {
             },
             { session },
           );
+          for (const other of pendingOthers) {
+            const current = await DonationRequest.findById(other._id).session(
+              session,
+            );
+            await notifyRequest(
+              current,
+              donation,
+              user,
+              'request_rejected',
+              session,
+              'Request closed because all food in the listing has been received',
+            );
+          }
         }
       }
       await saveDonation(donation, session);
@@ -232,6 +279,19 @@ export async function transitionRequest(id, user, action) {
       request.status,
     );
     await request.save({ session });
+    await notifyRequest(
+      request,
+      donation,
+      user,
+      {
+        accept: 'request_accepted',
+        reject: 'request_rejected',
+        cancel: 'request_cancelled',
+        handover: 'food_handed_over',
+        receive: 'receipt_confirmed',
+      }[action],
+      session,
+    );
     return request;
   });
 }
@@ -256,6 +316,10 @@ export async function expireDonations(now = new Date()) {
         status: { $in: ['pending', 'accepted'] },
       }).session(session);
       if (donation.status === 'expired' && !unresolved) return false;
+      const affected = await DonationRequest.find({
+        donation: donation._id,
+        status: { $in: ['pending', 'accepted'] },
+      }).session(session);
       const accepted = await DonationRequest.find({
         donation: donation._id,
         status: 'accepted',
@@ -300,6 +364,18 @@ export async function expireDonations(now = new Date()) {
         },
         { session },
       );
+      for (const previous of affected) {
+        const current = await DonationRequest.findById(previous._id).session(
+          session,
+        );
+        await notifyRequest(
+          current,
+          donation,
+          null,
+          'request_expired',
+          session,
+        );
+      }
       return true;
     });
     if (changed) count++;

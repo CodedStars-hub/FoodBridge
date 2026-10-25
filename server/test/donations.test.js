@@ -17,6 +17,23 @@ import { parseEnvironment } from '../src/config/env.js';
 import { User } from '../src/models/User.js';
 import { Donation } from '../src/models/Donation.js';
 import { DonationRequest } from '../src/models/DonationRequest.js';
+import { Notification } from '../src/models/Notification.js';
+import { ImageCleanupTask } from '../src/models/ImageCleanupTask.js';
+import { persistNotification } from '../src/services/notificationService.js';
+import {
+  dispatchNotifications,
+  attachRealtime,
+} from '../src/services/realtimeService.js';
+import { createServer } from 'node:http';
+import { io as connectSocket } from 'socket.io-client';
+import sharp from 'sharp';
+import * as cloudClient from '../src/services/cloudinaryClient.js';
+import { cleanupImages } from '../src/services/imageService.js';
+vi.mock('../src/services/cloudinaryClient.js', async (original) => ({
+  ...(await original()),
+  uploadCloudImage: vi.fn(),
+  destroyCloudImage: vi.fn(),
+}));
 import { expireDonations } from '../src/services/donationWorkflow.js';
 const config = parseEnvironment({
   NODE_ENV: 'test',
@@ -36,7 +53,13 @@ beforeAll(async () => {
   await mongoose.connect(replica.getUri(), {
     dbName: 'foodbridge_workflow_test',
   });
-  await Promise.all([User.init(), Donation.init(), DonationRequest.init()]);
+  await Promise.all([
+    User.init(),
+    Donation.init(),
+    DonationRequest.init(),
+    Notification.init(),
+    ImageCleanupTask.init(),
+  ]);
 }, 180000);
 afterAll(async () => {
   await mongoose.disconnect();
@@ -47,9 +70,12 @@ beforeEach(async () => {
     DonationRequest.deleteMany({}),
     Donation.deleteMany({}),
     User.deleteMany({}),
+    Notification.deleteMany({}),
+    ImageCleanupTask.deleteMany({}),
   ]);
   const inputs = [
     ['donor', 'donor', 'pending'],
+    ['admin', 'admin', 'verified'],
     ['other', 'donor', 'pending'],
     ['ngo', 'ngo', 'verified'],
     ['second', 'ngo', 'verified'],
@@ -69,8 +95,8 @@ beforeEach(async () => {
   actors = Object.fromEntries(users.map((user) => [user.name, user]));
 });
 afterEach(() => vi.restoreAllMocks());
-function call(method, path, actor = 'donor', body) {
-  let req = request(app)[method](path);
+function call(method, path, actor = 'donor', body, application = app) {
+  let req = request(application)[method](path);
   if (actor) {
     const user = actors[actor];
     const token = jwt.sign({ version: 0 }, config.JWT_SECRET, {
@@ -1172,6 +1198,750 @@ describe('volunteer logistics linked to existing reservations', () => {
     ).toBe('cancelled');
     await inventory(d._id, 6, 4);
     await expireDonations();
+    await inventory(d._id, 10, 0);
+  });
+});
+
+const yearlyRange = () => {
+  const year = new Date().getUTCFullYear();
+  return `from=${year}-01-01&to=${year}-12-31`;
+};
+async function receipt({
+  quantity = 10,
+  unit = 'servings',
+  requested = 4,
+} = {}) {
+  const d = await donation({ quantity, unit });
+  const r = await pending(d._id, 'ngo', requested);
+  await action(r._id, 'accept');
+  await action(r._id, 'handover');
+  await action(r._id, 'receive', 'ngo');
+  return { d, r };
+}
+describe('role analytics from MongoDB aggregations', () => {
+  it('groups confirmed redistributed quantities by unit and excludes merely accepted food', async () => {
+    await receipt();
+    await receipt({ unit: 'kg', requested: 3 });
+    const awaiting = await donation();
+    const r = await pending(awaiting._id);
+    await action(r._id, 'accept');
+    const result = await call('get', `/api/analytics/donor?${yearlyRange()}`);
+    expect(result.status).toBe(200);
+    expect(result.body.summary.totalDonations).toBe(3);
+    expect(result.body.summary.completedReceipts).toBe(2);
+    expect(result.body.quantitiesByUnit).toEqual([
+      { unit: 'kg', quantity: 3, receipts: 1 },
+      { unit: 'servings', quantity: 4, receipts: 1 },
+    ]);
+    expect(result.body.summary).not.toHaveProperty('totalQuantity');
+    expect(
+      (await call('get', `/api/analytics/donor?${yearlyRange()}`, 'other')).body
+        .quantitiesByUnit,
+    ).toEqual([]);
+  });
+  it('scopes NGO counts and receipt totals to the authenticated account', async () => {
+    await receipt();
+    const d = await donation();
+    const r = await pending(d._id);
+    await action(r._id, 'accept');
+    await donation();
+    const result = await call(
+      'get',
+      `/api/analytics/ngo?${yearlyRange()}`,
+      'ngo',
+    );
+    expect(result.status).toBe(200);
+    expect(result.body.summary).toMatchObject({
+      totalRequests: 2,
+      acceptedRequests: 1,
+      completedReceipts: 1,
+    });
+    expect(result.body.quantitiesByUnit[0].quantity).toBe(4);
+    expect(
+      (await call('get', `/api/analytics/ngo?${yearlyRange()}`, 'second')).body
+        .summary.totalRequests,
+    ).toBe(0);
+  });
+  it('computes admin user roles, current availability and listing completion rate without counting expiry as completion', async () => {
+    await receipt({ quantity: 4, requested: 4 });
+    await donation();
+    const expired = await donation();
+    await Donation.updateOne(
+      { _id: expired._id },
+      { $set: { pickupDeadline: new Date(Date.now() - 1) } },
+    );
+    const cancelled = await donation();
+    await call('post', `/api/donations/${cancelled._id}/cancel`);
+    const result = await call(
+      'get',
+      `/api/analytics/admin?${yearlyRange()}`,
+      'admin',
+    );
+    expect(result.status).toBe(200);
+    expect(result.body.summary).toMatchObject({
+      totalDonations: 4,
+      completedDonations: 1,
+      activeDonations: 1,
+      completionRate: 25,
+      totalUsers: 7,
+    });
+    expect(
+      result.body.usersByRole.find((row) => row.role === 'ngo').count,
+    ).toBe(3);
+    expect(result.body.monthly.reduce((sum, row) => sum + row.users, 0)).toBe(
+      7,
+    );
+  });
+  it('uses receipt time independently of listing creation time and returns monthly UTC buckets', async () => {
+    const { d, r } = await receipt();
+    const year = new Date().getUTCFullYear();
+    await Donation.updateOne(
+      { _id: d._id },
+      { $set: { createdAt: new Date(`${year}-01-15T12:00:00Z`) } },
+    );
+    await DonationRequest.updateOne(
+      { _id: r._id },
+      { $set: { receivedAt: new Date(`${year}-03-02T12:00:00Z`) } },
+    );
+    const march = await call(
+      'get',
+      `/api/analytics/donor?from=${year}-03-01&to=${year}-03-31`,
+    );
+    expect(march.body.summary.totalDonations).toBe(0);
+    expect(march.body.summary.completedReceipts).toBe(1);
+    expect(march.body.monthly).toHaveLength(1);
+    expect(march.body.monthly[0].receipts).toBe(1);
+  });
+  it('labels the legacy timestamp fallback and does not invent a receipt date', async () => {
+    const { r } = await receipt();
+    await DonationRequest.collection.updateOne(
+      { _id: new mongoose.Types.ObjectId(r._id) },
+      { $unset: { receivedAt: 1 } },
+    );
+    const result = await call(
+      'get',
+      `/api/analytics/ngo?${yearlyRange()}`,
+      'ngo',
+    );
+    expect(result.body.legacyReceiptTimestamps).toBe(1);
+    expect(result.body.notes.join(' ')).toContain('older completed');
+  });
+  it('enforces role authorization and rejects user overrides and invalid date ranges', async () => {
+    expect((await call('get', '/api/analytics/admin', 'donor')).status).toBe(
+      403,
+    );
+    expect((await call('get', '/api/analytics/donor', null)).status).toBe(401);
+    expect(
+      (await call('get', '/api/analytics/donor?userId=other')).status,
+    ).toBe(400);
+    for (const query of [
+      'from=invalid',
+      'from=2026-09-01&to=2026-01-01',
+      'from=2000-01-01&to=2026-01-01',
+    ])
+      expect((await call('get', `/api/analytics/donor?${query}`)).status).toBe(
+        400,
+      );
+  });
+  it('counts volunteer active custody, available pools and completion only after NGO receipt', async () => {
+    const { d, r } = await preparedPickup();
+    await eligibleVolunteers();
+    const before = await call(
+      'get',
+      `/api/analytics/volunteer?${yearlyRange()}`,
+      'volunteer',
+    );
+    expect(before.body.summary.availableAssignments).toBe(1);
+    await call('post', `/api/pickups/${r._id}/claim`, 'volunteer');
+    await action(r._id, 'handover');
+    await Donation.updateOne(
+      { _id: d._id },
+      { $set: { pickupDeadline: new Date(Date.now() - 1) } },
+    );
+    const held = await call(
+      'get',
+      `/api/analytics/volunteer?${yearlyRange()}`,
+      'volunteer',
+    );
+    expect(held.body.summary).toMatchObject({
+      availableAssignments: 0,
+      activeAssignments: 1,
+      completedPickups: 0,
+    });
+    await action(r._id, 'receive', 'ngo');
+    const done = await call(
+      'get',
+      `/api/analytics/volunteer?${yearlyRange()}`,
+      'volunteer',
+    );
+    expect(done.body.summary).toMatchObject({
+      activeAssignments: 0,
+      completedPickups: 1,
+    });
+    expect(done.body.pickupHistory[0]).not.toHaveProperty('origin');
+  });
+  it('does not credit a released volunteer for another volunteer’s completed delivery', async () => {
+    const { r } = await preparedPickup();
+    await eligibleVolunteers();
+    await call('post', `/api/pickups/${r._id}/claim`, 'volunteer');
+    await pickupAction(r._id, 'volunteer', 'release');
+    await call('post', `/api/pickups/${r._id}/claim`, 'courier');
+    await action(r._id, 'handover');
+    await action(r._id, 'receive', 'ngo');
+    const previous = await call(
+      'get',
+      `/api/analytics/volunteer?${yearlyRange()}`,
+      'volunteer',
+    );
+    expect(previous.body.summary.completedPickups).toBe(0);
+    expect(previous.body.pickupHistory).toHaveLength(1);
+    expect(previous.body.pickupHistory[0].assignedToMe).toBe(false);
+    expect(
+      (
+        await call(
+          'get',
+          `/api/analytics/volunteer?${yearlyRange()}`,
+          'courier',
+        )
+      ).body.summary.completedPickups,
+    ).toBe(1);
+  });
+  it('returns actual zero counts and no fabricated sample activity for empty ranges', async () => {
+    const result = await call(
+      'get',
+      '/api/analytics/admin?from=2020-01-01&to=2020-02-29',
+      'admin',
+    );
+    expect(result.body.summary.totalDonations).toBe(0);
+    expect(result.body.summary.completionRate).toBe(0);
+    expect(result.body.quantitiesByUnit).toEqual([]);
+    expect(result.body.monthly.map((row) => row.donations)).toEqual([0, 0]);
+  });
+});
+describe('persistent notifications and transactional outbox', () => {
+  it('persists recipient-scoped request, acceptance, handover and receipt notifications', async () => {
+    const d = await donation();
+    const r = await pending(d._id);
+    let donorInbox = await call('get', '/api/notifications', 'donor');
+    expect(donorInbox.body.unreadCount).toBe(1);
+    expect(donorInbox.body.items[0].type).toBe('request_created');
+    expect(
+      (await call('get', '/api/notifications', 'other')).body.items,
+    ).toEqual([]);
+    await action(r._id, 'accept');
+    expect(
+      (await call('get', '/api/notifications', 'ngo')).body.items.some(
+        (row) => row.type === 'request_accepted',
+      ),
+    ).toBe(true);
+    await action(r._id, 'handover');
+    await action(r._id, 'receive', 'ngo');
+    donorInbox = await call('get', '/api/notifications', 'donor');
+    expect(
+      donorInbox.body.items.some((row) => row.type === 'receipt_confirmed'),
+    ).toBe(true);
+    expect(donorInbox.body.items[0]).not.toHaveProperty('recipient');
+    expect(JSON.stringify(donorInbox.body)).not.toContain('pickupLocation');
+  });
+  it('idempotently stores the same event without resetting its read state', async () => {
+    const value = {
+      recipient: actors.donor._id,
+      eventKey: 'retry-safe-event',
+      type: 'request_created',
+      message: 'A donor-visible request',
+    };
+    await persistNotification(value);
+    const original = await Notification.findOne({ eventKey: value.eventKey });
+    original.readAt = new Date();
+    await original.save();
+    await persistNotification(value);
+    expect(
+      await Notification.countDocuments({ eventKey: value.eventKey }),
+    ).toBe(1);
+    expect(
+      (await Notification.findOne({ eventKey: value.eventKey })).readAt,
+    ).not.toBeNull();
+  });
+  it('prevents reading another account’s notifications and supports read-all/unread counts', async () => {
+    const d = await donation();
+    await pending(d._id);
+    const inbox = await call('get', '/api/notifications', 'donor');
+    const id = inbox.body.items[0].id;
+    expect(
+      (await call('patch', `/api/notifications/${id}/read`, 'ngo')).status,
+    ).toBe(404);
+    expect(
+      (await call('patch', `/api/notifications/${id}/read`, 'donor')).status,
+    ).toBe(200);
+    expect(
+      (await call('patch', `/api/notifications/${id}/read`, 'donor')).status,
+    ).toBe(200);
+    expect(
+      (await call('get', '/api/notifications?unread=true', 'donor')).body.items,
+    ).toEqual([]);
+    await pending(d._id, 'second');
+    expect(
+      (await call('patch', '/api/notifications/read-all', 'donor')).body
+        .unreadCount,
+    ).toBe(0);
+    expect(
+      (await call('get', '/api/notifications', 'donor')).body.unreadCount,
+    ).toBe(0);
+    expect(
+      (await call('get', '/api/notifications?recipient=other', 'donor')).status,
+    ).toBe(400);
+  });
+  it('rolls back notification rows with a failed business transaction', async () => {
+    const d = await donation();
+    vi.spyOn(Notification, 'updateOne').mockRejectedValueOnce(
+      new Error('injected outbox storage failure'),
+    );
+    expect((await submit(d._id)).status).toBe(500);
+    expect(await DonationRequest.countDocuments()).toBe(0);
+    expect(await Notification.countDocuments()).toBe(0);
+    await inventory(d._id, 10, 0);
+  });
+  it('keeps receipt and inventory committed when socket delivery fails, then retries', async () => {
+    const { d, r } = await receipt();
+    const pendingCount = await Notification.countDocuments({
+      broadcastAt: null,
+    });
+    const failing = {
+      in: () => ({ fetchSockets: async () => [] }),
+      to: () => ({
+        emit: () => {
+          throw new Error('transport unavailable');
+        },
+      }),
+    };
+    expect(await dispatchNotifications(failing)).toBe(0);
+    expect(await Notification.countDocuments({ broadcastAt: null })).toBe(
+      pendingCount,
+    );
+    expect((await DonationRequest.findById(r._id)).status).toBe('completed');
+    await inventory(d._id, 6, 0, 4);
+    const healthy = {
+      in: () => ({ fetchSockets: async () => [] }),
+      to: () => ({ emit: vi.fn() }),
+    };
+    expect(await dispatchNotifications(healthy)).toBe(pendingCount);
+    expect(await Notification.countDocuments({ broadcastAt: null })).toBe(0);
+  });
+  it('does not duplicate events when an invalid repeated transition is retried', async () => {
+    const d = await donation();
+    const r = await pending(d._id);
+    await action(r._id, 'accept');
+    const count = await Notification.countDocuments();
+    expect((await action(r._id, 'accept')).status).toBe(409);
+    expect(await Notification.countDocuments()).toBe(count);
+  });
+  it('notifies affected NGOs on donation cancellation and volunteer claims/status changes', async () => {
+    const d = await donation();
+    await pending(d._id);
+    await call('post', `/api/donations/${d._id}/cancel`);
+    expect(
+      (await call('get', '/api/notifications', 'ngo')).body.items.some(
+        (row) => row.type === 'donation_cancelled',
+      ),
+    ).toBe(true);
+    const setup = await preparedPickup();
+    await eligibleVolunteers();
+    await call('post', `/api/pickups/${setup.r._id}/claim`, 'volunteer');
+    expect(
+      (await call('get', '/api/notifications', 'donor')).body.items.some(
+        (row) => row.type === 'volunteer_claimed',
+      ),
+    ).toBe(true);
+    await pickupAction(setup.r._id, 'volunteer', 'start');
+    expect(
+      (await call('get', '/api/notifications', 'ngo')).body.items.some(
+        (row) => row.type === 'pickup_status_changed',
+      ),
+    ).toBe(true);
+  });
+});
+let socketRuntime;
+const socketClients = [];
+afterEach(async () => {
+  for (const client of socketClients.splice(0)) client.disconnect();
+  if (socketRuntime) {
+    await socketRuntime.close();
+    socketRuntime = null;
+  }
+});
+async function socketServer() {
+  const server = createServer(app);
+  socketRuntime = attachRealtime(server, app, config, { poll: false });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  return `http://127.0.0.1:${server.address().port}`;
+}
+function actorCookie(actor, expiresIn = 3600, version = 0) {
+  return `foodbridge_session=${jwt.sign({ version }, config.JWT_SECRET, { subject: String(actors[actor]._id), expiresIn, issuer: 'foodbridge-api', audience: 'foodbridge-client', algorithm: 'HS256' })}`;
+}
+function socketClient(url, actor, extra = {}) {
+  const client = connectSocket(url, {
+    transports: ['websocket'],
+    reconnection: false,
+    autoConnect: false,
+    extraHeaders: {
+      Origin: config.CLIENT_ORIGIN,
+      ...(actor ? { Cookie: actorCookie(actor) } : {}),
+      ...extra,
+    },
+  });
+  socketClients.push(client);
+  return client;
+}
+async function connects(client) {
+  await new Promise((resolve, reject) => {
+    client.once('connect', resolve);
+    client.once('connect_error', reject);
+    client.connect();
+  });
+}
+describe('Socket.IO authentication, authorization and reconnect', () => {
+  it('joins only the cookie-authenticated user room and ignores client-selected rooms', async () => {
+    const url = await socketServer();
+    const client = socketClient(url, 'donor');
+    await connects(client);
+    client.emit('join', `user:${actors.ngo._id}`);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const serverSocket = [...socketRuntime.io.sockets.sockets.values()][0];
+    expect(serverSocket.rooms.has(`user:${actors.donor._id}`)).toBe(true);
+    expect(serverSocket.rooms.has(`user:${actors.ngo._id}`)).toBe(false);
+  });
+  it('rejects missing, forged, expired, revoked and wrong-origin connections', async () => {
+    const url = await socketServer();
+    const attempts = [
+      socketClient(url, null),
+      socketClient(url, null, { Cookie: 'foodbridge_session=forged' }),
+      socketClient(url, null, { Cookie: actorCookie('donor', -1) }),
+      socketClient(url, null, { Cookie: actorCookie('donor', 3600, 99) }),
+      socketClient(url, 'donor', { Origin: 'https://foreign.example.test' }),
+    ];
+    for (const client of attempts) {
+      const error = await new Promise((resolve) => {
+        client.once('connect_error', resolve);
+        client.connect();
+      });
+      expect(error).toBeInstanceOf(Error);
+      expect(client.connected).toBe(false);
+    }
+  });
+  it('delivers only to the recipient and retains a reconnectable durable inbox', async () => {
+    const url = await socketServer();
+    const donor = socketClient(url, 'donor'),
+      ngo = socketClient(url, 'ngo');
+    await connects(donor);
+    await connects(ngo);
+    let receivedByOther = 0;
+    ngo.on('notifications:changed', () => receivedByOther++);
+    await persistNotification({
+      recipient: actors.donor._id,
+      eventKey: 'socket-recipient',
+      type: 'request_created',
+      message: 'Request available',
+    });
+    const delivered = new Promise((resolve) =>
+      donor.once('notifications:changed', resolve),
+    );
+    await dispatchNotifications(socketRuntime.io);
+    await delivered;
+    expect(receivedByOther).toBe(0);
+    donor.disconnect();
+    await persistNotification({
+      recipient: actors.donor._id,
+      eventKey: 'offline-event',
+      type: 'request_created',
+      message: 'Offline update',
+    });
+    await dispatchNotifications(socketRuntime.io);
+    const again = socketClient(url, 'donor');
+    await connects(again);
+    expect(
+      (await call('get', '/api/notifications', 'donor')).body.unreadCount,
+    ).toBe(2);
+  });
+  it('disconnects live sockets on logout and rejects the copied old cookie', async () => {
+    const url = await socketServer();
+    const client = socketClient(url, 'donor');
+    await connects(client);
+    const disconnected = new Promise((resolve) =>
+      client.once('disconnect', resolve),
+    );
+    expect((await call('post', '/api/auth/logout', 'donor')).status).toBe(204);
+    await disconnected;
+    expect(client.connected).toBe(false);
+    const stale = socketClient(url, 'donor');
+    const error = await new Promise((resolve) => {
+      stale.once('connect_error', resolve);
+      stale.connect();
+    });
+    expect(error).toBeInstanceOf(Error);
+  });
+});
+const imageConfig = {
+  ...config,
+  CLOUDINARY_CLOUD_NAME: 'isolated-test-cloud',
+  CLOUDINARY_API_KEY: 'isolated-test-key',
+  CLOUDINARY_API_SECRET: 'isolated-test-secret',
+};
+const imageApp = createApp(imageConfig);
+async function png() {
+  return sharp({
+    create: { width: 4, height: 4, channels: 3, background: '#317448' },
+  })
+    .png()
+    .toBuffer();
+}
+function configureImageProvider() {
+  vi.mocked(cloudClient.uploadCloudImage).mockImplementation(
+    async (buffer, publicId) => {
+      const metadata = await sharp(buffer).metadata();
+      return {
+        public_id: publicId,
+        secure_url: `https://res.cloudinary.com/isolated-test-cloud/image/upload/${publicId}.webp`,
+        format: 'webp',
+        bytes: buffer.length,
+        width: metadata.width,
+        height: metadata.height,
+      };
+    },
+  );
+  vi.mocked(cloudClient.destroyCloudImage).mockResolvedValue({ result: 'ok' });
+}
+function imageRequest(
+  id,
+  {
+    actor = 'donor',
+    buffer,
+    mime = 'image/png',
+    application = imageApp,
+    csrf = true,
+    method = 'post',
+  } = {},
+) {
+  const agent = request(application);
+  let req = agent[method](`/api/donations/${id}/image`).set(
+    'Origin',
+    config.CLIENT_ORIGIN,
+  );
+  if (actor) req = req.set('Cookie', actorCookie(actor));
+  if (csrf) req = req.set('X-CSRF-Protection', 'foodbridge');
+  return method === 'post'
+    ? req.attach('file', buffer, { filename: 'food.png', contentType: mime })
+    : req.send({});
+}
+describe('authenticated managed image uploads with isolated Cloudinary adapter', () => {
+  it('validates, re-encodes and stores image metadata and public ID without changing inventory', async () => {
+    configureImageProvider();
+    const d = await donation();
+    const result = await imageRequest(d._id, { buffer: await png() });
+    expect(result.status).toBe(200);
+    expect(result.body.image).toMatchObject({
+      format: 'webp',
+      width: 4,
+      height: 4,
+    });
+    expect(result.body.image.publicId).toMatch(
+      new RegExp(`^foodbridge/donations/${d._id}/`),
+    );
+    await inventory(d._id, 10, 0);
+    expect((await Donation.findById(d._id)).image.secureUrl).toBe(
+      result.body.image.secureUrl,
+    );
+  });
+  it('preserves backward compatibility for records without an image revision', async () => {
+    configureImageProvider();
+    const d = await donation();
+    await Donation.collection.updateOne(
+      { _id: new mongoose.Types.ObjectId(d._id) },
+      { $unset: { imageVersion: 1 } },
+    );
+    expect((await imageRequest(d._id, { buffer: await png() })).status).toBe(
+      200,
+    );
+  });
+  it('rejects unauthorized, wrong-role, non-owner and CSRF-less image changes', async () => {
+    configureImageProvider();
+    const d = await donation();
+    const buffer = await png();
+    for (const [actor, status] of [
+      [null, 401],
+      ['ngo', 403],
+      ['other', 403],
+    ])
+      expect((await imageRequest(d._id, { actor, buffer })).status).toBe(
+        status,
+      );
+    expect((await imageRequest(d._id, { buffer, csrf: false })).status).toBe(
+      403,
+    );
+    expect(cloudClient.uploadCloudImage).not.toHaveBeenCalled();
+  });
+  it('rejects MIME/signature mismatches, SVG, forged PNG headers and oversize images', async () => {
+    configureImageProvider();
+    const d = await donation();
+    expect(
+      (await imageRequest(d._id, { buffer: await png(), mime: 'image/jpeg' }))
+        .status,
+    ).toBe(415);
+    expect(
+      (
+        await imageRequest(d._id, {
+          buffer: Buffer.from('<svg/>'),
+          mime: 'image/svg+xml',
+        })
+      ).status,
+    ).toBe(415);
+    expect([400, 415]).toContain(
+      (
+        await imageRequest(d._id, {
+          buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+        })
+      ).status,
+    );
+    expect(
+      (await imageRequest(d._id, { buffer: Buffer.alloc(5 * 1024 * 1024 + 1) }))
+        .status,
+    ).toBe(413);
+    expect(cloudClient.uploadCloudImage).not.toHaveBeenCalled();
+  });
+  it('gracefully disables uploads when Cloudinary is missing and exposes no secrets', async () => {
+    configureImageProvider();
+    const d = await donation();
+    const result = await imageRequest(d._id, {
+      buffer: await png(),
+      application: app,
+    });
+    expect(result.status).toBe(503);
+    const details = await call('get', `/api/donations/${d._id}`);
+    expect(details.body.imageUpload.enabled).toBe(false);
+    expect(JSON.stringify(details.body)).not.toContain('CLOUDINARY_API_SECRET');
+    expect(cloudClient.uploadCloudImage).not.toHaveBeenCalled();
+  });
+  it('preserves an existing image and inventory when Cloudinary upload fails', async () => {
+    configureImageProvider();
+    const d = await donation();
+    const first = await imageRequest(d._id, { buffer: await png() });
+    vi.mocked(cloudClient.uploadCloudImage).mockRejectedValueOnce(
+      new Error('provider credentials must stay private'),
+    );
+    const failed = await imageRequest(d._id, { buffer: await png() });
+    expect(failed.status).toBe(502);
+    expect(JSON.stringify(failed.body)).not.toContain('credentials');
+    expect((await Donation.findById(d._id)).image.publicId).toBe(
+      first.body.image.publicId,
+    );
+    await inventory(d._id, 10, 0);
+  });
+  it('replaces images and deletes only the prior server-owned asset', async () => {
+    configureImageProvider();
+    const d = await donation();
+    const first = await imageRequest(d._id, { buffer: await png() });
+    const second = await imageRequest(d._id, { buffer: await png() });
+    expect(second.status).toBe(200);
+    expect(second.body.image.publicId).not.toBe(first.body.image.publicId);
+    expect(cloudClient.destroyCloudImage).toHaveBeenCalledWith(
+      first.body.image.publicId,
+      imageConfig,
+    );
+    expect((await Donation.findById(d._id)).image.publicId).toBe(
+      second.body.image.publicId,
+    );
+  });
+  it('queues failed deletion, prevents non-owner deletion and retries cleanup idempotently', async () => {
+    configureImageProvider();
+    const d = await donation();
+    const saved = await imageRequest(d._id, { buffer: await png() });
+    expect(
+      (await imageRequest(d._id, { actor: 'other', method: 'delete' })).status,
+    ).toBe(403);
+    vi.mocked(cloudClient.destroyCloudImage).mockRejectedValueOnce(
+      new Error('temporary delete failure'),
+    );
+    const removed = await imageRequest(d._id, { method: 'delete' });
+    expect(removed.status).toBe(200);
+    expect(removed.body.cleanupPending).toBe(true);
+    expect((await Donation.findById(d._id)).image).toBeUndefined();
+    expect(
+      await ImageCleanupTask.exists({ publicId: saved.body.image.publicId }),
+    ).not.toBeNull();
+    await ImageCleanupTask.updateMany(
+      {},
+      { $set: { readyAfter: new Date(0) } },
+    );
+    await cleanupImages(imageConfig);
+    expect(await ImageCleanupTask.countDocuments()).toBe(0);
+    expect((await cleanupImages(imageConfig)).removed).toBe(0);
+  });
+  it('never deletes a cloud asset still referenced by a donation', async () => {
+    configureImageProvider();
+    const d = await donation();
+    const saved = await imageRequest(d._id, { buffer: await png() });
+    vi.mocked(cloudClient.destroyCloudImage).mockClear();
+    await ImageCleanupTask.create({
+      publicId: saved.body.image.publicId,
+      readyAfter: new Date(0),
+    });
+    await cleanupImages(imageConfig);
+    expect(cloudClient.destroyCloudImage).not.toHaveBeenCalled();
+    expect((await Donation.findById(d._id)).image.publicId).toBe(
+      saved.body.image.publicId,
+    );
+  });
+  it('does not let a normal listing PATCH orphan a managed cloud image', async () => {
+    configureImageProvider();
+    const d = await donation();
+    await imageRequest(d._id, { buffer: await png() });
+    expect(
+      (
+        await call('patch', `/api/donations/${d._id}`, 'donor', {
+          imageUrl: 'https://example.test/other.jpg',
+        })
+      ).status,
+    ).toBe(409);
+    expect(
+      (
+        await call('patch', `/api/donations/${d._id}`, 'donor', {
+          image: { publicId: 'someone-else' },
+        })
+      ).status,
+    ).toBe(400);
+  });
+  it('atomically resolves concurrent image replacements and cleans only the losing upload', async () => {
+    configureImageProvider();
+    const normal = vi
+      .mocked(cloudClient.uploadCloudImage)
+      .getMockImplementation();
+    let arrivals = 0;
+    let release;
+    const barrier = new Promise((resolve) => {
+      release = resolve;
+    });
+    vi.mocked(cloudClient.uploadCloudImage).mockImplementation(
+      async (...args) => {
+        arrivals++;
+        if (arrivals === 2) release();
+        await barrier;
+        return normal(...args);
+      },
+    );
+    const d = await donation();
+    const bytes = await png();
+    const results = await Promise.all([
+      imageRequest(d._id, { buffer: bytes }),
+      imageRequest(d._id, { buffer: bytes }),
+    ]);
+    expect(results.map((row) => row.status).sort()).toEqual([200, 409]);
+    const current = await Donation.findById(d._id);
+    const winner = results.find((row) => row.status === 200);
+    expect(current.image.publicId).toBe(winner.body.image.publicId);
+    expect(
+      cloudClient.destroyCloudImage.mock.calls.some(
+        ([publicId]) => publicId === winner.body.image.publicId,
+      ),
+    ).toBe(false);
     await inventory(d._id, 10, 0);
   });
 });

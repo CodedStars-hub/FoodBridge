@@ -54,6 +54,22 @@ const schema = new mongoose.Schema(
     allergenInformation: text(500),
     pickupLocation: text(500),
     location: optionalPoint,
+    image: {
+      type: new mongoose.Schema(
+        {
+          publicId: { type: String, required: true },
+          secureUrl: { type: String, required: true },
+          format: String,
+          bytes: Number,
+          width: Number,
+          height: Number,
+          uploadedAt: Date,
+        },
+        { _id: false },
+      ),
+      default: undefined,
+    },
+    imageVersion: { type: Number, default: 0 },
     imageUrl: { type: String, default: '', maxlength: 2048 },
     status: {
       type: String,
@@ -76,4 +92,6 @@ schema.pre('validate', function () {
 });
 schema.index({ status: 1, pickupDeadline: 1, createdAt: -1 });
 schema.index({ location: '2dsphere' });
+schema.index({ donor: 1, createdAt: -1 });
+schema.index({ createdAt: -1, status: 1 });
 export const Donation = mongoose.model('Donation', schema);

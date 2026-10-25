@@ -1,3 +1,4 @@
+import NotificationBell from '../components/NotificationBell.jsx';
 import LocationFields from '../components/LocationFields.jsx';
 import { locationInput } from '../utils/location.js';
 import { useState } from 'react';
@@ -217,6 +218,12 @@ export default function DashboardPage() {
             <LayoutDashboard size={18} />
             Overview
           </NavLink>
+          <NavLink className="sidebar-link" to={`${base}/analytics`}>
+            Analytics
+          </NavLink>
+          <NavLink className="sidebar-link" to={`${base}/notifications`}>
+            Notifications
+          </NavLink>
           {workspaceLinks.map(([label, path]) => (
             <NavLink key={path} className="sidebar-link" to={path} end>
               {label}
@@ -243,6 +250,7 @@ export default function DashboardPage() {
             <strong>{user.role}</strong>
           </span>
           <div className="dashboard-user">
+            <NotificationBell />
             <span className="avatar" aria-hidden="true">
               {user.name.charAt(0).toUpperCase()}
             </span>
@@ -304,6 +312,12 @@ export default function DashboardPage() {
                   ? 'Listings, requests and history use real API data. No demonstration metrics are displayed.'
                   : 'No operational data or activity metrics are displayed. Your account and profile are live.'}
               </p>
+              <Link
+                className="button button-outline overview-analytics"
+                to={`${base}/analytics`}
+              >
+                View your role’s analytics →
+              </Link>
               <ProfileForm />
             </>
           )}

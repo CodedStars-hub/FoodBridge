@@ -1,5 +1,6 @@
 const baseUrl = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
 export async function api(path, { method = 'GET', body, signal } = {}) {
+  const multipart = body instanceof FormData;
   const response = await fetch(`${baseUrl}${path}`, {
     method,
     credentials: 'include',
@@ -8,10 +9,12 @@ export async function api(path, { method = 'GET', body, signal } = {}) {
       method === 'GET'
         ? {}
         : {
-            'Content-Type': 'application/json',
+            ...(multipart ? {} : { 'Content-Type': 'application/json' }),
             'X-CSRF-Protection': 'foodbridge',
           },
-    ...(method !== 'GET' ? { body: JSON.stringify(body ?? {}) } : {}),
+    ...(method !== 'GET'
+      ? { body: multipart ? body : JSON.stringify(body ?? {}) }
+      : {}),
   });
   const data = response.status === 204 ? null : await response.json();
   if (!response.ok) {

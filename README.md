@@ -1,6 +1,6 @@
 # FoodBridge
 
-A MERN surplus food redistribution platform for college cafeterias, restaurants, NGOs, and volunteers. Milestone 3 adds donor food listings, verified NGO requests, transactional reservations, handover/receipt, expiry, and donation history to the existing authentication and dashboard foundation. Milestone 4 adds explainable geospatial matching and volunteer pickup logistics. Approval workflows, notifications, and analytics remain future milestones.
+A MERN surplus food redistribution platform for college cafeterias, restaurants, NGOs, and volunteers. Milestone 3 adds donor food listings, verified NGO requests, transactional reservations, handover/receipt, expiry, and donation history to the existing authentication and dashboard foundation. Milestone 4 adds explainable geospatial matching and volunteer pickup logistics. Milestone 5 adds role-scoped analytics, persistent real-time notifications, and optional Cloudinary food images. Account verification remains a trusted manual operation.
 
 ## Requirements and setup
 
@@ -23,7 +23,7 @@ Paste the generated value into `JWT_SECRET` in `server/.env`, replacing the plac
 npm run dev
 ```
 
-Open http://localhost:5173; the API runs on http://localhost:5001. Vite proxies `/api` to the API. Press Ctrl+C to stop both. Register as a donor, NGO (organization name required), or volunteer. Registration signs you in and takes you to your role’s dashboard. Reloading restores your session. The profile form persists safe field changes; logout ends all your sessions.
+Open http://localhost:5173; the API runs on http://localhost:5001. Vite proxies `/api` and `/socket.io` (including WebSockets) to the API. Press Ctrl+C to stop both. Register as a donor, NGO (organization name required), or volunteer. Registration signs you in and takes you to your role’s dashboard. Reloading restores your session. The profile form persists safe field changes; logout ends all your sessions.
 
 Leaving `MONGODB_URI` empty allows the API and landing page to run without database features; account endpoints return HTTP 503. A configured but unreachable database causes startup to fail. Environment validation, including a valid JWT secret, always runs. Health never queries MongoDB.
 
@@ -74,7 +74,7 @@ The server build checks its JavaScript entry points; Node executes the source di
 - Cookies are HttpOnly, host-only, and scoped to `/`. Development uses `foodbridge_session` without Secure for localhost HTTP. Production uses `__Host-foodbridge_session` with Secure; production browser origins must use HTTPS. Default SameSite=Lax suits same-site hosting. Cross-site deployments require production HTTPS and SameSite=None; browser third-party cookie restrictions may still prevent these sessions. Prefer serving the app and API on the same site.
 - Logout atomically increments the user’s private `tokenVersion` and clears the cookie with matching attributes. **Logout invalidates all sessions for that account**, including copied JWTs. There is no refresh-token flow. Expired sessions require login again; rotating `JWT_SECRET` invalidates every session.
 - Credentialed CORS uses only the configured origin allowlist. There is no wildcard.
-- **CSRF:** every state-changing request under `/api/auth` and `/api/users`, including registration/login/logout, requires an exact allowlisted `Origin`, `Content-Type: application/json`, and `X-CSRF-Protection: foodbridge`. Missing/foreign origins, missing headers, and simple form content types are rejected with 403. Browsers cannot send that custom header cross-origin without a successful CORS preflight. It is an intentional request marker, not a secret token. SameSite is defense in depth. GET endpoints never mutate account state. See [OWASP’s custom-header guidance](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#employing-custom-request-headers-for-ajaxapi). Non-browser clients must send the same Origin/header/content type. Apply this middleware to any future cookie-authenticated mutation routes too.
+- **CSRF:** every state-changing request under `/api`, including registration/login/logout, requires an exact allowlisted `Origin`, `Content-Type: application/json`, and `X-CSRF-Protection: foodbridge`. Missing/foreign origins, missing headers, and simple form content types are rejected with 403. The owner-only image POST additionally accepts multipart data with the same Origin/custom-header checks. Browsers cannot send that custom header cross-origin without a successful CORS preflight. It is an intentional request marker, not a secret token. SameSite is defense in depth. GET endpoints never mutate account state. See [OWASP’s custom-header guidance](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#employing-custom-request-headers-for-ajaxapi). Non-browser clients must send the same Origin/header/content type. Apply this middleware to any future cookie-authenticated mutation routes too.
 - Login and signup have separate per-IP limits with consistent JSON errors and standard rate-limit headers. The default store is process-local and resets at restart. Multiple API instances require a shared store before production scaling. Express does not trust forwarded IP headers by default; configure `trust proxy` only for your actual trusted proxy topology before deployment, otherwise proxy clients may share one limit.
 - Strict allowlisted request schemas reject unknown fields, object injection, and privileged mass assignment. Plain-text profile values reject markup/control characters; React escapes rendered text. Public signup never accepts admin, verification status, or session version. Profile updates cannot change email, role, verification status, or password. Password reset/change and email verification are not implemented.
 - Model serialization and explicit response projections exclude password hashes and session versions. Auth/profile responses are `Cache-Control: no-store`. Unexpected errors expose no stacks or credentials.
@@ -154,7 +154,7 @@ server/test/     API foundation and auth/security tests
 
 Public routes: `/`, `/login`, `/register`. Registration accepts `?role=donor`, `?role=ngo`, or `?role=volunteer`. `/dashboard` redirects to the signed-in role. `/dashboard/donor`, `/dashboard/ngo`, `/dashboard/volunteer`, and `/dashboard/admin` require a session and the matching role; wrong-role visitors go to their own dashboard. These browser guards improve UX; API middleware independently enforces authorization.
 
-The auth provider restores via `/api/auth/me` and distinguishes session absence from network/service errors. Sessions remain in HttpOnly cookies, never localStorage. Forms provide loading states, labelled inputs, validation feedback, and keyboard focus styles. Dashboards include a sidebar, account summary, editable profile, logout, and donor/NGO food rescue pages. Volunteer pickup pages are now functional; unrelated admin future modules remain clearly marked. No operational metrics or fake activity are shown. The existing landing design and local illustration remain intact; optional maps use the OpenStreetMap tiles described in Milestone 4.
+The auth provider restores via `/api/auth/me` and distinguishes session absence from network/service errors. Sessions remain in HttpOnly cookies, never localStorage. Forms provide loading states, labelled inputs, validation feedback, and keyboard focus styles. Dashboards include a sidebar, account summary, editable profile, logout, and donor/NGO food rescue pages. Volunteer pickup pages are now functional; unrelated admin future modules remain clearly marked. Analytics show only recorded activity; empty accounts have zero/empty states. The existing landing design and local illustration remain intact; optional maps use the OpenStreetMap tiles described in Milestone 4.
 
 ## Milestone 3: food rescue workspace
 
@@ -184,7 +184,7 @@ An NGO can arrange volunteer transport for an accepted reservation after providi
 
 New NGO routes: `/dashboard/ngo/recommended`, `/dashboard/ngo/nearby`, `/dashboard/ngo/pickups`. Volunteer routes: `/dashboard/volunteer/pickups/available`, `/dashboard/volunteer/pickups`, `/dashboard/volunteer/pickups/:id`. Donors see `/dashboard/donor/pickups`; participating donors/NGOs can open `/dashboard/:role/pickups/:id` from requests. An assignment ID is its existing request ID.
 
-Leaflet maps are optional and lazy loaded. Attributed OpenStreetMap tiles are requested only after Show optional map. Browsing uses rounded area points; exact stops are restricted to participants and the current active volunteer. There is no continuous GPS tracking, route/road ETA, food safety certification, external AI, paid mapping service, upload provider or notification infrastructure. See the linked tile policy and production hosting requirements in the API documentation.
+Leaflet maps are optional and lazy loaded. Attributed OpenStreetMap tiles are requested only after Show optional map. Browsing uses rounded area points; exact stops are restricted to participants and the current active volunteer. There is no continuous GPS tracking, route/road ETA, food safety certification, external AI, paid mapping service, paid mapping infrastructure. See the linked tile policy and production hosting requirements in the API documentation.
 
 No new secrets or required environment variables are introduced. Verify volunteer accounts through trusted database administration as documented, just like existing NGO verification. Schedule the existing expiry command for persisted cleanup; live availability/cutoff checks do not depend on it.
 
@@ -201,3 +201,19 @@ Authentication tests run without a live database. Supertest exercises the actual
 Frontend tests cover landing preservation, login, registration roles, session restoration/loading/failure/retry, all four dashboard redirects, profile saves, accessible errors, and logout success/failure. Backend tests cover registration, normalized duplicates and unique-index races, password hashing/limits, input rejection, invalid login, auth and role denial, profile mass assignment, logout/token revocation, cookies, CSRF, credentialed CORS, and rate limits, alongside the original health tests.
 
 Manual smoke check with MongoDB: register each public role (NGOs need an organization), reload the dashboard, edit the profile, try another role’s dashboard URL, and log out. Bootstrap the initial admin once and confirm its dashboard. No account fixtures or real credentials are committed.
+
+## Milestone 5: analytics, notifications and images
+
+See [Milestone 5 API documentation](docs/milestone-5-api.md) for endpoint contracts, counting definitions, socket authentication, upload limits, cleanup and manual checks. Every role has `/dashboard/:role/analytics` and `/dashboard/:role/notifications`, plus a notification bell. Date-filtered charts have accessible tabular equivalents. Quantities are grouped by unit and count only confirmed NGO receipts. No impact estimates are invented.
+
+Notifications are persisted inside the existing business transactions, with unique event/recipient keys. Socket.IO sends authenticated per-user inbox invalidations after commit; the client refreshes the durable inbox on reconnect and polls when disconnected. Logout revokes connected sessions. The current adapter/worker targets one API process; multi-instance delivery and production deployment remain Milestone 6 work.
+
+Images are optional. Obtain `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` from your Cloudinary console and set them only in your local `server/.env`. Do not copy placeholders over existing credentials, put secrets in `client/.env`, or commit them. Restart the API. Missing configuration disables image controls while food workflows remain available. Donation owners upload from donation details after publishing. JPEG, PNG and WebP are limited to 5 MiB and 20 megapixels; the backend verifies signatures, decodes, strips metadata and re-encodes to WebP.
+
+The API worker retries orphan cleanup every minute. To run one bounded cleanup batch manually:
+
+```sh
+npm run cleanup:images -w server
+```
+
+Tests use real MongoDB transactions and image decoding with a mocked Cloudinary transport. They do not establish that a particular live Cloudinary account is configured correctly; perform the provider smoke check in the linked guide after supplying credentials. No `.env` secrets are modified by tests.

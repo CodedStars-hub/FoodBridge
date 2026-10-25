@@ -1,3 +1,4 @@
+import { notifyRequest } from './notificationService.js';
 import { Donation } from '../models/Donation.js';
 import { DonationRequest } from '../models/DonationRequest.js';
 import { User } from '../models/User.js';
@@ -70,6 +71,13 @@ export async function arrangePickup(id, user) {
     pickupEvent(request.pickup, 'arrange', user);
     await lockDonation(donation, session);
     await request.save({ session });
+    await notifyRequest(
+      request,
+      donation,
+      user,
+      'pickup_status_changed',
+      session,
+    );
     return request;
   });
 }
@@ -113,6 +121,7 @@ export async function claimPickup(id, user) {
     );
     if (!assigned)
       fail(409, 'Another volunteer has already claimed this pickup');
+    await notifyRequest(assigned, donation, user, 'volunteer_claimed', session);
     return assigned;
   });
 }
@@ -195,6 +204,13 @@ export async function updatePickup(id, user, { action, reason = '' }) {
     }
     await lockDonation(donation, session);
     await request.save({ session });
+    await notifyRequest(
+      request,
+      donation,
+      user,
+      'pickup_status_changed',
+      session,
+    );
     return request;
   });
 }

@@ -68,6 +68,15 @@ export function DonationCard({ donation }) {
   const { user } = useAuth();
   return (
     <article className="donation-card">
+      {donation.image?.secureUrl && (
+        <img
+          className="donation-card-image"
+          src={donation.image.secureUrl}
+          alt={donation.title}
+          loading="lazy"
+          referrerPolicy="no-referrer"
+        />
+      )}
       <div className="donation-card-top">
         <span className="food-category">
           <Leaf size={17} />

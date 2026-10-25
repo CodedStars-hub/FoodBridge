@@ -1,4 +1,7 @@
 import express from 'express';
+import { createImageRoutes } from './routes/imageRoutes.js';
+import { createNotificationRoutes } from './routes/notificationRoutes.js';
+import { createAnalyticsRoutes } from './routes/analyticsRoutes.js';
 import { createPickupRoutes } from './routes/pickupRoutes.js';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -16,6 +19,7 @@ import healthRoutes from './routes/healthRoutes.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 export function createApp(config = parseEnvironment()) {
   const app = express();
+  app.set('config', config);
   app.disable('x-powered-by');
   app.use(helmet());
   app.use(cors({ origin: config.CLIENT_ORIGINS, credentials: true }));
@@ -43,9 +47,12 @@ export function createApp(config = parseEnvironment()) {
     createUserRoutes(config),
   );
   for (const [path, router] of [
+    ['/api/donations', createImageRoutes(config)],
     ['/api/donations', createDonationRoutes(config)],
     ['/api/requests', createRequestRoutes(config)],
     ['/api/pickups', createPickupRoutes(config)],
+    ['/api/notifications', createNotificationRoutes(config)],
+    ['/api/analytics', createAnalyticsRoutes(config)],
   ]) {
     app.use(
       path,

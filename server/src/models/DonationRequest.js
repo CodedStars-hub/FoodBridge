@@ -38,6 +38,10 @@ const schema = new mongoose.Schema(
       default: 'pending',
       index: true,
     },
+    acceptedAt: Date,
+    handedOverAt: Date,
+    receivedAt: Date,
+    notificationVersion: { type: Number, default: 0 },
     message: { type: String, trim: true, maxlength: 1000, default: '' },
     pickup: { type: pickupSchema, default: undefined },
     active: { type: Boolean, default: true },
@@ -51,4 +55,8 @@ schema.index(
 );
 schema.index({ 'pickup.status': 1, status: 1 });
 schema.index({ 'pickup.volunteer': 1, 'pickup.status': 1 });
+schema.index({ ngo: 1, createdAt: -1 });
+schema.index({ 'pickup.events.actor': 1, updatedAt: -1 });
+schema.index({ status: 1, receivedAt: -1 });
+schema.index({ 'pickup.volunteer': 1, status: 1, receivedAt: -1 });
 export const DonationRequest = mongoose.model('DonationRequest', schema);

@@ -28,6 +28,7 @@ export function authController(config) {
         { _id: req.user._id },
         { $inc: { tokenVersion: 1 } },
       );
+      req.app.get('io')?.in(`user:${req.user._id}`).disconnectSockets(true);
       clearSession(res, config);
       res.status(204).end();
     },

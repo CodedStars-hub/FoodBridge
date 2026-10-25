@@ -6,7 +6,10 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
-    proxy: { '/api': 'http://localhost:5001' },
+    proxy: {
+      '/api': 'http://localhost:5001',
+      '/socket.io': { target: 'http://localhost:5001', ws: true },
+    },
   },
   test: { environment: 'jsdom', setupFiles: './src/test-setup.js', css: true },
 });

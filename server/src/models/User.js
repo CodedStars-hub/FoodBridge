@@ -56,4 +56,5 @@ const userSchema = new mongoose.Schema(
   },
 );
 userSchema.index({ location: '2dsphere' });
+userSchema.index({ createdAt: -1, role: 1 });
 export const User = mongoose.model('User', userSchema);

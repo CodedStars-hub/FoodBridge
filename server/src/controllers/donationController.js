@@ -1,4 +1,8 @@
 import mongoose from 'mongoose';
+import {
+  cloudinaryEnabled,
+  imageLimits,
+} from '../services/cloudinaryClient.js';
 import { donationLocationView } from '../services/locationViews.js';
 import { Donation } from '../models/Donation.js';
 import { DonationRequest } from '../models/DonationRequest.js';
@@ -31,6 +35,7 @@ function donationView(doc, viewer, exact = false) {
     pickupDeadline: new Date(value.pickupDeadline),
   });
   delete value.workflowVersion;
+  delete value.imageVersion;
   delete value.__v;
   return donationLocationView(value, viewer, exact);
 }
@@ -128,7 +133,14 @@ export async function detail(req, res) {
       ngo: req.user._id,
       status: { $in: ['accepted', 'handed_over', 'completed'] },
     }));
-  res.json({ donation: donationView(donation, req.user, exact) });
+  res.json({
+    donation: donationView(donation, req.user, exact),
+    imageUpload: {
+      enabled: cloudinaryEnabled(req.app.get('config')),
+      maxBytes: imageLimits.maxBytes,
+      supportedFormats: imageLimits.formats,
+    },
+  });
 }
 export async function edit(req, res) {
   res.json({

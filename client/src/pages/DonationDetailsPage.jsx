@@ -1,3 +1,4 @@
+import DonationImageManager from '../components/DonationImageManager.jsx';
 import LocationMap from '../components/LocationMap.jsx';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -145,6 +146,15 @@ export default function DonationDetailsPage() {
             </div>
             <div className="detail-grid">
               <section className="profile-card donation-details">
+                {donation.image?.secureUrl && (
+                  <img
+                    className="donation-detail-image"
+                    src={donation.image.secureUrl}
+                    alt={donation.title}
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                  />
+                )}
                 <p>{donation.description}</p>
                 <dl className="inventory-totals">
                   <div>
@@ -240,6 +250,13 @@ export default function DonationDetailsPage() {
                       />
                     )}
                   </div>
+                )}
+                {isOwner && (
+                  <DonationImageManager
+                    donation={donation}
+                    config={result.data.imageUpload}
+                    refresh={result.refresh}
+                  />
                 )}
                 {user.role === 'ngo' && (
                   <RequestForm

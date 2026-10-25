@@ -55,6 +55,9 @@ const schema = z.object({
     .positive()
     .max(10080)
     .default(240),
+  CLOUDINARY_CLOUD_NAME: z.string().trim().default(''),
+  CLOUDINARY_API_KEY: z.string().trim().default(''),
+  CLOUDINARY_API_SECRET: z.string().trim().default(''),
   JSON_BODY_LIMIT: z
     .string()
     .regex(/^\d+(kb|mb|b)$/i)

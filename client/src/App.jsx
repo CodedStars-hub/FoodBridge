@@ -1,3 +1,6 @@
+import { lazy, Suspense } from 'react';
+import NotificationsPage from './pages/NotificationsPage.jsx';
+const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage.jsx'));
 import DiscoveryPage from './pages/DiscoveryPage.jsx';
 import PickupsPage from './pages/PickupsPage.jsx';
 import { Route, Routes } from 'react-router-dom';
@@ -33,6 +36,21 @@ export default function App() {
         {['donor', 'ngo', 'volunteer', 'admin'].map((role) => (
           <Route key={role} element={<ProtectedRoute role={role} />}>
             <Route path={`dashboard/${role}`} element={<DashboardPage />}>
+              <Route
+                path="analytics"
+                element={
+                  <Suspense
+                    fallback={
+                      <p className="workspace-state" role="status">
+                        Loading analytics…
+                      </p>
+                    }
+                  >
+                    <AnalyticsPage />
+                  </Suspense>
+                }
+              />
+              <Route path="notifications" element={<NotificationsPage />} />
               {role === 'donor' && (
                 <>
                   <Route path="donations" element={<DonationsPage mine />} />
