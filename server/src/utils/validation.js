@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { geoPoint } from './locationValidation.js';
 import { HttpError } from './HttpError.js';
 const text = (max) =>
   z
@@ -55,6 +56,13 @@ export const loginSchema = z.strictObject({
 export const profileSchema = z
   .strictObject({
     name: text(100).optional(),
+    location: geoPoint.nullable().optional(),
+    address: z
+      .string()
+      .trim()
+      .max(500)
+      .refine((value) => !/[<>]/.test(value), 'Use plain text')
+      .optional(),
     phone: phone.optional(),
     organizationName: organizationName.optional(),
   })

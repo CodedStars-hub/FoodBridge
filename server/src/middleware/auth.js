@@ -17,7 +17,9 @@ export function requireAuth(config) {
       !Number.isInteger(claims.version)
     )
       throw new HttpError(401, 'Invalid session');
-    const user = await User.findById(claims.sub).select('+tokenVersion');
+    const user = await User.findById(claims.sub).select(
+      '+tokenVersion +location +address',
+    );
     if (!user || user.tokenVersion !== claims.version)
       throw new HttpError(401, 'Your session has expired. Please log in again');
     req.user = user;

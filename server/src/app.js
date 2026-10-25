@@ -1,4 +1,5 @@
 import express from 'express';
+import { createPickupRoutes } from './routes/pickupRoutes.js';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
@@ -7,6 +8,10 @@ import { createUserRoutes } from './routes/userRoutes.js';
 import { csrfProtection } from './middleware/csrf.js';
 import { databaseReady } from './middleware/databaseReady.js';
 import { parseEnvironment } from './config/env.js';
+import {
+  createDonationRoutes,
+  createRequestRoutes,
+} from './routes/donationRoutes.js';
 import healthRoutes from './routes/healthRoutes.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 export function createApp(config = parseEnvironment()) {
@@ -37,6 +42,22 @@ export function createApp(config = parseEnvironment()) {
     databaseReady,
     createUserRoutes(config),
   );
+  for (const [path, router] of [
+    ['/api/donations', createDonationRoutes(config)],
+    ['/api/requests', createRequestRoutes(config)],
+    ['/api/pickups', createPickupRoutes(config)],
+  ]) {
+    app.use(
+      path,
+      (_req, res, next) => {
+        res.set('Cache-Control', 'no-store');
+        next();
+      },
+      csrfProtection(config),
+      databaseReady,
+      router,
+    );
+  }
   app.use(notFound);
   app.use(errorHandler);
   return app;

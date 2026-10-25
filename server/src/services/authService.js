@@ -7,6 +7,8 @@ export function publicUser(user) {
     name: user.name,
     email: user.email,
     role: user.role,
+    ...(user.location ? { location: user.location } : {}),
+    ...(user.address ? { address: user.address } : {}),
     phone: user.phone || '',
     organizationName: user.organizationName || '',
     verificationStatus: user.verificationStatus,
@@ -25,7 +27,7 @@ export async function registerUser(input) {
 const dummyHash = bcrypt.hashSync('unused timing comparison value', 12);
 export async function loginUser({ email, password }) {
   const user = await User.findOne({ email }).select(
-    '+passwordHash +tokenVersion',
+    '+passwordHash +tokenVersion +location +address',
   );
   const valid = await bcrypt.compare(password, user?.passwordHash || dummyHash);
   if (!user || !valid) throw new HttpError(401, 'Invalid email or password');

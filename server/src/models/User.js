@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { optionalPoint } from './location.js';
 const userSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true, maxlength: 100 },
@@ -31,6 +32,14 @@ const userSchema = new mongoose.Schema(
       enum: ['pending', 'verified', 'rejected'],
       default: 'pending',
     },
+    location: { ...optionalPoint, select: false },
+    address: {
+      type: String,
+      trim: true,
+      maxlength: 500,
+      default: '',
+      select: false,
+    },
     tokenVersion: { type: Number, default: 0, select: false },
   },
   {
@@ -46,4 +55,5 @@ const userSchema = new mongoose.Schema(
     },
   },
 );
+userSchema.index({ location: '2dsphere' });
 export const User = mongoose.model('User', userSchema);

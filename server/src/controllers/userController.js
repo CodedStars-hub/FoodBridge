@@ -10,7 +10,7 @@ export async function updateProfile(req, res) {
   const user = await User.findByIdAndUpdate(
     req.user._id,
     { $set: updates },
-    { new: true, runValidators: true },
+    { new: true, runValidators: true, projection: '+location +address' },
   );
   if (!user) throw new HttpError(401, 'Authentication required');
   res.json({ user: publicUser(user) });

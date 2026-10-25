@@ -144,7 +144,13 @@ describe('sessions and role-based navigation', () => {
     expect(
       screen.getByRole('navigation', { name: 'Dashboard navigation' }),
     ).toBeInTheDocument();
-    expect(screen.getAllByText('Upcoming feature')).toHaveLength(3);
+    expect(
+      screen.getAllByText(
+        ['donor', 'ngo', 'volunteer'].includes(role)
+          ? 'Ready to use'
+          : 'Upcoming feature',
+      ),
+    ).toHaveLength(role === 'volunteer' ? 2 : 3);
   });
   it('redirects the wrong frontend role to its own dashboard', async () => {
     fetch.mockResolvedValue(reply({ user: donor }));

@@ -1,5 +1,7 @@
+import LocationFields from '../components/LocationFields.jsx';
+import { locationInput } from '../utils/location.js';
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, NavLink, useOutlet } from 'react-router-dom';
 import {
   LayoutDashboard,
   UserRound,
@@ -60,7 +62,10 @@ function ProfileForm() {
     setSaved(false);
     try {
       await updateProfile(
-        Object.fromEntries(new FormData(event.currentTarget)),
+        locationInput(
+          Object.fromEntries(new FormData(event.currentTarget)),
+          user,
+        ),
       );
       setSaved(true);
     } catch (failure) {
@@ -121,6 +126,14 @@ function ProfileForm() {
             />
           )}
         </div>
+        <LocationFields
+          key={user.id}
+          location={user.location}
+          address={user.address}
+          includeAddress
+          disabled={busy}
+          error={fields.location || fields.address}
+        />
         <div className="account-facts">
           <span>
             Email <strong>{user.email}</strong>
@@ -154,6 +167,32 @@ export default function DashboardPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const details = content[user.role];
+  const outlet = useOutlet();
+  const base = `/dashboard/${user.role}`;
+  const workspaceLinks =
+    user.role === 'donor'
+      ? [
+          ['My donations', `${base}/donations`],
+          ['Create donation', `${base}/donations/new`],
+          ['Incoming requests', `${base}/requests`],
+          ['Donation history', `${base}/history`],
+          ['Pickup status', `${base}/pickups`],
+        ]
+      : user.role === 'ngo'
+        ? [
+            ['Explore donations', `${base}/explore`],
+            ['Recommended donations', `${base}/recommended`],
+            ['Nearby donations', `${base}/nearby`],
+            ['My requests', `${base}/requests`],
+            ['Delivery tracking', `${base}/pickups`],
+            ['Donation history', `${base}/history`],
+          ]
+        : user.role === 'volunteer'
+          ? [
+              ['Available pickups', `${base}/pickups/available`],
+              ['My assignments', `${base}/pickups`],
+            ]
+          : [];
   async function signOut() {
     setBusy(true);
     setError('');
@@ -174,11 +213,16 @@ export default function DashboardPage() {
         <Brand />
         <div className="workspace-label">{user.role} workspace</div>
         <nav aria-label="Dashboard navigation">
-          <a className="sidebar-link active" href="#overview">
+          <NavLink className="sidebar-link" to={base} end>
             <LayoutDashboard size={18} />
             Overview
-          </a>
-          <a className="sidebar-link" href="#profile">
+          </NavLink>
+          {workspaceLinks.map(([label, path]) => (
+            <NavLink key={path} className="sidebar-link" to={path} end>
+              {label}
+            </NavLink>
+          ))}
+          <a className="sidebar-link" href={`${base}#profile`}>
             <UserRound size={18} />
             My profile
           </a>
@@ -210,43 +254,59 @@ export default function DashboardPage() {
           </div>
         </header>
         <main id="dashboard-main" className="dashboard-main">
-          <section id="overview" className="dashboard-welcome">
-            <span className="eyebrow">
-              WELCOME, {user.name.split(' ')[0].toUpperCase()}
-            </span>
-            <h1>{details.title}</h1>
-            <p>{details.description}</p>
-            <span className="verification-badge">
-              <ShieldCheck size={15} />
-              Verification: {user.verificationStatus}
-            </span>
-          </section>
-          {error && (
-            <p className="form-alert" role="alert">
-              {error}
-            </p>
+          {outlet || (
+            <>
+              <section id="overview" className="dashboard-welcome">
+                <span className="eyebrow">
+                  WELCOME, {user.name.split(' ')[0].toUpperCase()}
+                </span>
+                <h1>{details.title}</h1>
+                <p>{details.description}</p>
+                <span className="verification-badge">
+                  <ShieldCheck size={15} />
+                  Verification: {user.verificationStatus}
+                </span>
+              </section>
+              {error && (
+                <p className="form-alert" role="alert">
+                  {error}
+                </p>
+              )}
+              <div className="dashboard-section-title">
+                <h2>Your workspace</h2>
+                <span className="coming-label">
+                  {workspaceLinks.length
+                    ? 'Your food rescue workspace is ready'
+                    : 'Foundation ready · More coming soon'}
+                </span>
+              </div>
+              <div className="dashboard-modules">
+                {(workspaceLinks.length
+                  ? workspaceLinks.slice(0, 3)
+                  : details.sections.map((title) => [title, null])
+                ).map(([title, path]) => (
+                  <article className="dashboard-module" key={title}>
+                    <Clock3 size={23} />
+                    <span className="coming-label">
+                      {path ? 'Ready to use' : 'Upcoming feature'}
+                    </span>
+                    <h3>{path ? <Link to={path}>{title}</Link> : title}</h3>
+                    <p>
+                      {path
+                        ? 'Open your food rescue workspace.'
+                        : 'This module will be introduced in a future milestone.'}
+                    </p>
+                  </article>
+                ))}
+              </div>
+              <p className="dashboard-disclaimer">
+                {workspaceLinks.length
+                  ? 'Listings, requests and history use real API data. No demonstration metrics are displayed.'
+                  : 'No operational data or activity metrics are displayed. Your account and profile are live.'}
+              </p>
+              <ProfileForm />
+            </>
           )}
-          <div className="dashboard-section-title">
-            <h2>Your workspace</h2>
-            <span className="coming-label">
-              Foundation ready · More coming soon
-            </span>
-          </div>
-          <div className="dashboard-modules">
-            {details.sections.map((title) => (
-              <article className="dashboard-module" key={title}>
-                <Clock3 size={23} />
-                <span className="coming-label">Upcoming feature</span>
-                <h3>{title}</h3>
-                <p>This module will be introduced in a future milestone.</p>
-              </article>
-            ))}
-          </div>
-          <p className="dashboard-disclaimer">
-            No operational data or activity metrics are displayed. Your account
-            and profile are live.
-          </p>
-          <ProfileForm />
         </main>
         <footer className="dashboard-footer">
           FoodBridge · Less waste. More possibility.

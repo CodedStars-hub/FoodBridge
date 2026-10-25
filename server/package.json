@@ -8,7 +8,8 @@
     "start": "node src/index.js",
     "build": "node --check src/index.js && node --check src/app.js",
     "test": "vitest run",
-    "bootstrap:admin": "node scripts/bootstrapAdmin.js"
+    "bootstrap:admin": "node scripts/bootstrapAdmin.js",
+    "expire:donations": "node scripts/expireDonations.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -24,6 +25,7 @@
   },
   "devDependencies": {
     "supertest": "^7.1.4",
-    "vitest": "^5.0.5"
+    "vitest": "^5.0.5",
+    "mongodb-memory-server": "^10.2.1"
   }
 }
