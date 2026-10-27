@@ -1,9 +1,9 @@
-/* All workflow surfaces are donor-scoped. Other roles keep their existing interiors. */
-.donor-workspace {
+/* Shared editorial workflow primitives. Donor presentation remains unchanged. */
+:is(.donor-workspace, .community-workspace, .admin-workspace) {
   color: #282d25;
   font-family: var(--public-sans);
 }
-.donor-workspace h1 {
+:is(.donor-workspace, .community-workspace, .admin-workspace) h1 {
   font-family: var(--public-serif);
   font-weight: 400;
   letter-spacing: -0.045em;
@@ -11,33 +11,35 @@
   line-height: 1.12;
   font-size: clamp(32px, 3vw, 43px);
 }
-.donor-workspace h2 {
+:is(.donor-workspace, .community-workspace, .admin-workspace) h2 {
   font-family: var(--public-serif);
   font-weight: 400;
   letter-spacing: -0.6px;
   color: #233d2d;
 }
-.donor-workspace .workspace-page {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .workspace-page {
   max-width: 1250px;
   margin-inline: auto;
 }
-.donor-workspace .workspace-title {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .workspace-title {
   margin-bottom: 26px;
   gap: 24px;
 }
-.donor-workspace .workspace-title p {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .workspace-title
+  p {
   font-size: 12px;
   color: #68715c;
   line-height: 1.8;
   margin-top: 12px;
   max-width: 590px;
 }
-.donor-workspace .eyebrow {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .eyebrow {
   font-size: 12px;
   letter-spacing: 0.06em;
   color: #697b58;
 }
-.donor-workspace .button {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .button {
   min-height: 44px;
   padding: 11px 18px;
   border-radius: 5px;
@@ -46,23 +48,24 @@
   border-color: #233d2d;
   gap: 10px;
 }
-.donor-workspace .button:hover {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .button:hover {
   background: #152f20;
   transform: translateY(-1px);
 }
-.donor-workspace .button-outline {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .button-outline {
   background: transparent;
   color: #233d2d;
   border-color: #c8cfba;
 }
-.donor-workspace .button-outline:hover {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .button-outline:hover {
   background: #e7eadd;
 }
-.donor-workspace .text-link {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .text-link {
   color: #425b36;
   font-size: 12px;
 }
-.donor-workspace .status-badge {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .status-badge {
   font-family: var(--public-sans);
   font-size: 12px;
   font-weight: 500;
@@ -72,46 +75,53 @@
   text-transform: capitalize;
   white-space: nowrap;
 }
-.donor-workspace .status-available,
-.donor-workspace .status-verified,
-.donor-workspace .status-completed,
-.donor-workspace .status-delivered {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .status-available,
+:is(.donor-workspace, .community-workspace, .admin-workspace) .status-verified,
+:is(.donor-workspace, .community-workspace, .admin-workspace) .status-completed,
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .status-delivered {
   background: #e1ead6;
   color: #3c5c32;
 }
-.donor-workspace .status-pending,
-.donor-workspace .status-awaiting_volunteer {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .status-pending,
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .status-awaiting_volunteer {
   background: #f0e4cc;
   color: #636859;
 }
-.donor-workspace .status-cancelled,
-.donor-workspace .status-rejected,
-.donor-workspace .status-expired {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .status-cancelled,
+:is(.donor-workspace, .community-workspace, .admin-workspace) .status-rejected,
+:is(.donor-workspace, .community-workspace, .admin-workspace) .status-expired {
   background: #efe0d6;
   color: #944a30;
 }
-.donor-workspace .profile-card,
-.donor-workspace .request-card {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .profile-card,
+:is(.donor-workspace, .community-workspace, .admin-workspace) .request-card {
   border: 1px solid #dbdece;
   background: #fcfbf7;
   box-shadow: none;
   border-radius: 7px;
   padding: 25px;
 }
-.donor-workspace .profile-card > h2 {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .profile-card
+  > h2 {
   font-size: 23px;
 }
-.donor-workspace .workspace-state {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .workspace-state {
   border: 1px dashed #d0d6c1;
   border-radius: 6px;
   background: #f3f2e8;
   min-height: 130px;
   padding: 28px;
 }
-.donor-workspace .workspace-state h2 {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .workspace-state
+  h2 {
   font-size: 25px;
 }
-.donor-workspace .declaration-note {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .declaration-note {
   background: #eeeddf;
   color: #69715c;
   padding: 15px 17px;
@@ -120,12 +130,12 @@
   line-height: 1.8;
   margin-top: 20px;
 }
-.donor-workspace .field-hint {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .field-hint {
   font-size: 13px;
   color: #69715c;
   line-height: 1.75;
 }
-.donor-workspace .notice-panel {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .notice-panel {
   border: 1px solid #d5dbc7;
   background: #edf0e2;
   color: #4a5e3d;
@@ -133,7 +143,7 @@
   font-size: 12px;
   padding: 16px;
 }
-.donor-workspace .form-alert {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .form-alert {
   font-size: 12px;
 }
 .donor-welcome {
@@ -419,7 +429,8 @@
   display: block;
   margin-top: 5px;
 }
-.donor-workspace .donation-filters {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .donation-filters {
   background: #efefe3;
   border: 1px solid #dbdfcc;
   padding: 16px;
@@ -427,19 +438,25 @@
   gap: 14px;
   margin-bottom: 24px;
 }
-.donor-workspace .donation-filters label {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .donation-filters
+  label {
   font-size: 12px;
   color: #637155;
 }
-.donor-workspace .donation-filters input,
-.donor-workspace .donation-filters select {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .donation-filters
+  input,
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .donation-filters
+  select {
   background: #fcfbf7;
   border-color: #c8cfb9;
   font-size: 12px;
   min-height: 41px;
   border-radius: 4px;
 }
-.donor-workspace .donations-grid {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .donations-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 20px;
 }
@@ -565,7 +582,7 @@
   color: #636859;
   margin-top: 11px;
 }
-.donor-workspace .donation-form {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .donation-form {
   padding: 0;
   border: 0;
   background: transparent;
@@ -576,8 +593,12 @@
   gap: 24px;
   align-items: start;
 }
-.donor-workspace .donation-form > fieldset,
-.donor-workspace .donation-form > .location-fields {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .donation-form
+  > fieldset,
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .donation-form
+  > .location-fields {
   margin-bottom: 22px;
   padding: 25px;
   background: #fcfbf7;
@@ -585,7 +606,9 @@
   border-radius: 6px;
   min-width: 0;
 }
-.donor-workspace .donation-form legend {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .donation-form
+  legend {
   font-family: var(--public-serif);
   font-size: 23px;
   font-weight: 400;
@@ -593,20 +616,26 @@
   padding: 0 8px;
   margin: 0;
 }
-.donor-workspace .form-field label {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .form-field
+  label {
   font: 500 11px var(--public-sans);
   color: #455b3c;
   margin-bottom: 8px;
 }
-.donor-workspace input,
-.donor-workspace textarea,
-.donor-workspace select {
+:is(.donor-workspace, .community-workspace, .admin-workspace) input,
+:is(.donor-workspace, .community-workspace, .admin-workspace) textarea,
+:is(.donor-workspace, .community-workspace, .admin-workspace) select {
   font-family: var(--public-sans);
   color: #282d25;
 }
-.donor-workspace .form-field input,
-.donor-workspace .form-field select,
-.donor-workspace .form-field textarea {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .form-field input,
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .form-field
+  select,
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .form-field
+  textarea {
   background: #fcfbf7;
   border: 1px solid #c9d0bd;
   border-radius: 4px;
@@ -614,16 +643,24 @@
   padding: 12px;
   width: 100%;
 }
-.donor-workspace .form-field input:focus,
-.donor-workspace .form-field textarea:focus,
-.donor-workspace .form-field select:focus {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .form-field
+  input:focus,
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .form-field
+  textarea:focus,
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .form-field
+  select:focus {
   outline: 2px solid #71875b;
   outline-offset: 2px;
 }
-.donor-workspace .form-field {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .form-field {
   margin-bottom: 20px;
 }
-.donor-workspace .donation-form .declaration-note {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .donation-form
+  .declaration-note {
   margin-top: 0;
   margin-bottom: 20px;
 }
@@ -655,7 +692,9 @@
   padding-left: 16px;
   margin-block: 18px;
 }
-.donor-workspace .donation-form .hero-actions {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .donation-form
+  .hero-actions {
   padding: 5px 0 20px;
 }
 .donor-upload-intro {
@@ -664,33 +703,38 @@
   line-height: 1.8;
   margin-block: 5px 15px;
 }
-.donor-workspace .requests-list {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .requests-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
 }
-.donor-workspace .request-card {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .request-card {
   margin: 0;
   min-width: 0;
   padding: 23px;
 }
-.donor-workspace .request-card h2 {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .request-card h2 {
   font-size: 26px;
   margin-top: 7px;
 }
-.donor-workspace .request-card .eyebrow {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .request-card
+  .eyebrow {
   font-size: 12px;
   text-transform: none;
   letter-spacing: 0;
 }
-.donor-workspace .request-quantity {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .request-quantity {
   color: #536e43;
   font-size: 13px;
   padding-block: 13px;
   border-block: 1px solid #e1e5d3;
   margin-block: 17px;
 }
-.donor-workspace .request-card blockquote {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .request-card
+  blockquote {
   background: #f1f1e6;
   border: 0;
   border-left: 2px solid #b5c49d;
@@ -700,7 +744,7 @@
   font-size: 12px;
   margin: 0 0 16px;
 }
-.donor-workspace .request-times {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .request-times {
   font-size: 12px;
   color: #636859;
   line-height: 1.85;
@@ -708,11 +752,13 @@
   flex-direction: column;
   gap: 4px;
 }
-.donor-workspace .request-card .hero-actions {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .request-card
+  .hero-actions {
   gap: 10px;
   margin-top: 20px;
 }
-.donor-workspace .pickup-summary {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .pickup-summary {
   background: #eff1e6;
   border-radius: 4px;
   padding: 10px;
@@ -790,94 +836,114 @@
 .donor-pickup-progress li.is-reached::before {
   background: #71875b;
 }
-.donor-workspace .pickup-card .pickup-stops {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .pickup-card
+  .pickup-stops {
   background: #eff1e6;
   border-radius: 5px;
   padding: 15px;
 }
-.donor-workspace #profile {
+:is(.donor-workspace, .community-workspace, .admin-workspace) #profile {
   margin-top: 14px;
   scroll-margin-top: 100px;
   padding: 28px;
 }
-.donor-workspace #profile h2 {
+:is(.donor-workspace, .community-workspace, .admin-workspace) #profile h2 {
   font-size: 29px;
 }
-.donor-workspace #profile .dashboard-muted {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  #profile
+  .dashboard-muted {
   font-size: 12px;
   margin-block: 12px 24px;
   color: #636859;
 }
-.donor-workspace .account-facts {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .account-facts {
   background: #eeefe2;
   border: 0;
   border-radius: 5px;
   padding: 17px;
   font-size: 13px;
 }
-.donor-workspace .image-manager {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .image-manager {
   margin-top: 20px;
 }
-.donor-workspace .image-manager p {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .image-manager p {
   font-size: 13px;
 }
-.donor-workspace .image-manager input[type='file'] {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .image-manager
+  input[type='file'] {
   width: 100%;
   min-height: 44px;
   font-size: 12px;
   margin-block: 12px;
 }
-.donor-workspace .detail-grid {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .detail-grid {
   grid-template-columns: minmax(0, 1.4fr) minmax(270px, 1fr);
   gap: 22px;
 }
-.donor-workspace .donor-detail-photo {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .donor-detail-photo {
   max-height: 320px;
   min-height: 200px;
   border-radius: 5px;
   margin-bottom: 22px;
 }
-.donor-workspace .donation-details > p {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .donation-details
+  > p {
   font-size: 13px;
   line-height: 1.85;
 }
-.donor-workspace .inventory-totals {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .inventory-totals {
   background: #eef1e5;
   border-radius: 5px;
   padding: 17px;
 }
-.donor-workspace .declaration-details {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .declaration-details {
   font-size: 12px;
 }
-.donor-workspace .declaration-details dt {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .declaration-details
+  dt {
   color: #636859;
 }
-.donor-workspace .owner-actions .button {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .owner-actions
+  .button {
   width: 100%;
 }
-.donor-workspace .confirm-dialog {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .confirm-dialog {
   background: #fcfbf7;
   border: 1px solid #d5ddc5;
   border-radius: 9px;
   color: #282d25;
 }
-.donor-workspace .confirm-dialog h2 {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .confirm-dialog
+  h2 {
   font-size: 29px;
 }
-.donor-workspace .confirm-dialog p {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .confirm-dialog
+  p {
   font-size: 13px;
   line-height: 1.8;
 }
-.donor-workspace .analytics-card {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .analytics-card {
   background: #fcfbf7;
   border: 1px solid #d9dfcd;
   box-shadow: none;
 }
-.donor-workspace .chart-canvas {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .chart-canvas {
   min-width: 0;
 }
 @media (max-width: 1200px) {
-  .donor-workspace .donations-grid {
+  :is(.donor-workspace, .community-workspace, .admin-workspace)
+    .donations-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .donor-form-layout {
@@ -899,10 +965,10 @@
     grid-template-columns: 1fr;
     gap: 0;
   }
-  .donor-workspace .requests-list {
+  :is(.donor-workspace, .community-workspace, .admin-workspace) .requests-list {
     grid-template-columns: 1fr;
   }
-  .donor-workspace .detail-grid {
+  :is(.donor-workspace, .community-workspace, .admin-workspace) .detail-grid {
     grid-template-columns: 1fr;
   }
   .donor-welcome h1 {
@@ -926,7 +992,8 @@
   }
 }
 @media (max-width: 550px) {
-  .donor-workspace .donations-grid {
+  :is(.donor-workspace, .community-workspace, .admin-workspace)
+    .donations-grid {
     grid-template-columns: 1fr;
   }
   .donor-panel {
@@ -935,24 +1002,36 @@
   .donor-panel-heading h2 {
     font-size: 22px;
   }
-  .donor-workspace .workspace-title {
+  :is(.donor-workspace, .community-workspace, .admin-workspace)
+    .workspace-title {
     flex-direction: column;
     gap: 18px;
   }
-  .donor-workspace .profile-card,
-  .donor-workspace .request-card {
+  :is(.donor-workspace, .community-workspace, .admin-workspace) .profile-card,
+  :is(.donor-workspace, .community-workspace, .admin-workspace) .request-card {
     padding: 20px;
   }
-  .donor-workspace .donation-form > fieldset,
-  .donor-workspace .donation-form > .location-fields {
+  :is(.donor-workspace, .community-workspace, .admin-workspace)
+    .donation-form
+    > fieldset,
+  :is(.donor-workspace, .community-workspace, .admin-workspace)
+    .donation-form
+    > .location-fields {
     padding: 20px;
   }
-  .donor-workspace .profile-fields {
+  :is(.donor-workspace, .community-workspace, .admin-workspace)
+    .profile-fields {
     grid-template-columns: 1fr;
   }
-  .donor-workspace .form-field input,
-  .donor-workspace .form-field select,
-  .donor-workspace .form-field textarea {
+  :is(.donor-workspace, .community-workspace, .admin-workspace)
+    .form-field
+    input,
+  :is(.donor-workspace, .community-workspace, .admin-workspace)
+    .form-field
+    select,
+  :is(.donor-workspace, .community-workspace, .admin-workspace)
+    .form-field
+    textarea {
     font-size: 16px;
   }
   .donor-recent-list article {
@@ -974,54 +1053,83 @@
   .donor-metrics article > span:last-child {
     font-size: 11px;
   }
-  .donor-workspace .donation-filters {
+  :is(.donor-workspace, .community-workspace, .admin-workspace)
+    .donation-filters {
     grid-template-columns: 1fr 1fr;
     padding: 14px;
   }
-  .donor-workspace .donation-filters .search-field {
+  :is(.donor-workspace, .community-workspace, .admin-workspace)
+    .donation-filters
+    .search-field {
     grid-column: 1/-1;
   }
-  .donor-workspace #profile {
+  :is(.donor-workspace, .community-workspace, .admin-workspace) #profile {
     padding: 20px;
   }
 }
 
-.donor-workspace {
+:is(.donor-workspace, .community-workspace, .admin-workspace) {
   overflow-wrap: anywhere;
 }
-.donor-workspace .button {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .button {
   font-size: 14px;
 }
-.donor-workspace .status-badge {
+:is(.donor-workspace, .community-workspace, .admin-workspace) .status-badge {
   font-size: 12px;
 }
-.donor-workspace .workspace-state .button {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .workspace-state
+  .button {
   margin-top: 18px;
 }
-.donor-workspace .donor-metrics article:first-child {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .donor-metrics
+  > article:first-child {
   background: #233d2d;
 }
-.donor-workspace .donor-metrics article:first-child strong,
-.donor-workspace .donor-metrics article:first-child .donor-metric-label {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .donor-metrics
+  > article:first-child
+  strong,
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .donor-metrics
+  > article:first-child
+  .donor-metric-label {
   color: #f7f4ec;
 }
-.donor-workspace .donor-metrics article:first-child > span:last-child,
-.donor-workspace .donor-metrics article:first-child svg {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .donor-metrics
+  > article:first-child
+  > span:last-child,
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .donor-metrics
+  > article:first-child
+  svg {
   color: #d2ddc1;
 }
-.donor-workspace .donor-activity-chart {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .donor-activity-chart {
   grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
 }
-.donor-workspace .donor-chart-column small {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .donor-chart-column
+  small {
   font-size: 11px;
 }
-.donor-workspace .donor-listing-actions > a,
-.donor-workspace .donor-cancel-link {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .donor-listing-actions
+  > a,
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .donor-cancel-link {
   min-height: 44px;
 }
-.donor-workspace .donor-pickup-progress li {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .donor-pickup-progress
+  li {
   font-size: 11px;
 }
-.donor-workspace .account-facts strong {
+:is(.donor-workspace, .community-workspace, .admin-workspace)
+  .account-facts
+  strong {
   overflow-wrap: anywhere;
 }

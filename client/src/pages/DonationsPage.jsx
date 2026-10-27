@@ -144,7 +144,26 @@ export default function DonationsPage({ mine = false }) {
                 </Link>
               )}
             </div>
-          ) : undefined
+          ) : (
+            <div className="workspace-state empty-state">
+              <h2>Nothing here just yet.</h2>
+              <p>
+                Try changing your filters or check back as the community shares
+                more food.
+              </p>
+              {Object.values(filters).some(Boolean) && (
+                <button
+                  className="button button-outline"
+                  onClick={() => {
+                    setFilters({ q: '', category: '', unit: '', status: '' });
+                    setPage(1);
+                  }}
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
+          )
         }
       >
         <div className="donations-grid">

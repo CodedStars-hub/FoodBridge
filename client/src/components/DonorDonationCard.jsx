@@ -1,28 +1,11 @@
-import { useState } from 'react';
+import DonationPhoto from './DonationPhoto.jsx';
+export { default as DonationPhoto } from './DonationPhoto.jsx';
 import { Link } from 'react-router-dom';
-import { Leaf, Clock3, ArrowUpRight, Pencil } from 'lucide-react';
+import { Clock3, ArrowUpRight, Pencil } from 'lucide-react';
 import { useAuth } from '../auth/useAuth.js';
 import { StatusBadge, ConfirmAction } from './DonationShared.jsx';
 import { api } from '../utils/api.js';
 import { readable, formatTime } from '../utils/donation.js';
-export function DonationPhoto({ donation, className = '' }) {
-  const [failed, setFailed] = useState(false);
-  return donation.image?.secureUrl && !failed ? (
-    <img
-      className={`donor-food-photo ${className}`}
-      src={donation.image.secureUrl}
-      alt={donation.title}
-      loading="lazy"
-      referrerPolicy="no-referrer"
-      onError={() => setFailed(true)}
-    />
-  ) : (
-    <div className={`donor-food-placeholder ${className}`}>
-      <Leaf size={30} strokeWidth={1.2} aria-hidden="true" />
-      <span>No photo provided</span>
-    </div>
-  );
-}
 export default function DonorDonationCard({ donation: d, refresh }) {
   const { user } = useAuth();
   const owner = String(d.donor?._id || d.donor) === user.id;

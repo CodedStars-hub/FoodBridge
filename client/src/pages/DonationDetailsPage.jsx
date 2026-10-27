@@ -38,6 +38,7 @@ function RequestForm({ donation, refresh }) {
     );
   async function submit(event) {
     event.preventDefault();
+    if (busy) return;
     setBusy(true);
     setError('');
     setFields({});
@@ -71,7 +72,7 @@ function RequestForm({ donation, refresh }) {
           </Link>
         </div>
       ) : (
-        <form aria-label="Request food" onSubmit={submit}>
+        <form aria-label="Request food" onSubmit={submit} aria-busy={busy}>
           <FormField
             name="requestedQuantity"
             label={`Requested quantity (${donation.unit})`}
@@ -154,23 +155,11 @@ export default function DonationDetailsPage() {
             </div>
             <div className="detail-grid">
               <section className="profile-card donation-details">
-                {user.role === 'donor' ? (
-                  <DonationPhoto
-                    key={donation.image?.secureUrl || donation._id}
-                    donation={donation}
-                    className="donor-detail-photo"
-                  />
-                ) : (
-                  donation.image?.secureUrl && (
-                    <img
-                      className="donation-detail-image"
-                      src={donation.image.secureUrl}
-                      alt={donation.title}
-                      loading="lazy"
-                      referrerPolicy="no-referrer"
-                    />
-                  )
-                )}
+                <DonationPhoto
+                  key={donation.image?.secureUrl || donation._id}
+                  donation={donation}
+                  className="donor-detail-photo"
+                />
                 <p>{donation.description}</p>
                 <dl className="inventory-totals">
                   <div>

@@ -5,8 +5,6 @@ import {
   UserRound,
   LogOut,
   ArrowUpRight,
-  Clock3,
-  ShieldCheck,
   Plus,
   HandHeart,
   Truck,
@@ -24,38 +22,13 @@ import { PublicBrand } from '../components/PublicSite.jsx';
 import NotificationBell from '../components/NotificationBell.jsx';
 import ProfileForm from '../components/ProfileForm.jsx';
 import DonorOverview from './DonorOverview.jsx';
+import AdminOverview from './AdminOverview.jsx';
+import { NgoOverview, VolunteerOverview } from './CommunityOverview.jsx';
 import { useAuth } from '../auth/useAuth.js';
 import '../workspace-shell.css';
 import '../donor-workspace.css';
-const content = {
-  ngo: {
-    title: 'Bring more possibility to your community.',
-    description: 'Your space to connect your organization with food rescue.',
-    sections: [
-      'Available food',
-      'Collection requests',
-      'Community connections',
-    ],
-  },
-  volunteer: {
-    title: 'Small actions move communities forward.',
-    description: 'Your space to lend a hand in food rescue.',
-    sections: [
-      'Pickup opportunities',
-      'Volunteer availability',
-      'Collection history',
-    ],
-  },
-  admin: {
-    title: 'A stronger foundation for shared good.',
-    description: 'Your space to support a trusted FoodBridge community.',
-    sections: [
-      'Account verification',
-      'Community management',
-      'Platform oversight',
-    ],
-  },
-};
+import '../community-workspace.css';
+import '../workspace-insights.css';
 const routeLabels = {
   donations: 'My donations',
   new: 'Create donation',
@@ -83,6 +56,7 @@ export default function DashboardPage() {
     accountButton = useRef(null),
     accountRoot = useRef(null);
   const base = `/dashboard/${user.role}`;
+  const roleLabel = user.role === 'ngo' ? 'NGO' : user.role;
   useEffect(() => {
     if (drawer) dialog.current?.showModal();
   }, [drawer]);
@@ -144,7 +118,7 @@ export default function DashboardPage() {
     return (
       <>
         <PublicBrand />
-        <p className="ws-workspace">{user.role} workspace</p>
+        <p className="ws-workspace">{roleLabel} workspace</p>
         <nav
           aria-label="Dashboard navigation"
           onClick={() => {
@@ -232,11 +206,21 @@ export default function DashboardPage() {
     .slice(base.length)
     .split('/')
     .filter(Boolean);
+  const roleLabels = {
+    requests: user.role === 'donor' ? 'Incoming requests' : 'My requests',
+    pickups:
+      user.role === 'volunteer'
+        ? 'My assignments'
+        : user.role === 'ngo'
+          ? 'Delivery tracking'
+          : 'Pickup status',
+  };
   const pageLabel =
     location.hash === '#profile'
       ? 'My profile'
       : segments.length
-        ? routeLabels[segments.at(-1)] ||
+        ? roleLabels[segments.at(-1)] ||
+          routeLabels[segments.at(-1)] ||
           (segments[0] === 'donations' ? 'Donation details' : 'Pickup details')
         : 'Overview';
   return (
@@ -275,7 +259,7 @@ export default function DashboardPage() {
               <Menu size={21} />
             </button>
             <nav aria-label="Breadcrumb" className="ws-breadcrumb">
-              <Link to={base}>{user.role} workspace</Link>
+              <Link to={base}>{roleLabel} workspace</Link>
               <span>/</span>
               <strong aria-current="page">{pageLabel}</strong>
             </nav>
@@ -326,7 +310,7 @@ export default function DashboardPage() {
         </header>
         <main
           id="dashboard-main"
-          className={`workspace-content ${user.role === 'donor' ? 'donor-workspace' : 'legacy-workspace'}`}
+          className={`workspace-content ${user.role === 'donor' ? 'donor-workspace' : ['ngo', 'volunteer'].includes(user.role) ? 'community-workspace' : 'admin-workspace'}`}
           tabIndex={-1}
         >
           {error && (
@@ -340,8 +324,16 @@ export default function DashboardPage() {
                 <DonorOverview />
                 <ProfileForm />
               </>
+            ) : ['ngo', 'volunteer'].includes(user.role) ? (
+              <>
+                {user.role === 'ngo' ? <NgoOverview /> : <VolunteerOverview />}
+                <ProfileForm />
+              </>
             ) : (
-              <LegacyOverview user={user} links={links} base={base} />
+              <>
+                <AdminOverview />
+                <ProfileForm />
+              </>
             ))}
         </main>
         <footer className="ws-footer">
@@ -350,67 +342,5 @@ export default function DashboardPage() {
         </footer>
       </div>
     </div>
-  );
-}
-
-function LegacyOverview({ user, links, base }) {
-  const details = content[user.role];
-  const workspaceLinks = links.map(([label, path]) => [
-    label,
-    `${base}/${path}`,
-  ]);
-  return (
-    <>
-      <section id="overview" className="dashboard-welcome">
-        <span className="eyebrow">
-          WELCOME, {user.name.split(' ')[0].toUpperCase()}
-        </span>
-        <h1>{details.title}</h1>
-        <p>{details.description}</p>
-        <span className="verification-badge">
-          <ShieldCheck size={15} />
-          Verification: {user.verificationStatus}
-        </span>
-      </section>
-      <div className="dashboard-section-title">
-        <h2>Your workspace</h2>
-        <span className="coming-label">
-          {workspaceLinks.length
-            ? 'Your food rescue workspace is ready'
-            : 'Foundation ready · More coming soon'}
-        </span>
-      </div>
-      <div className="dashboard-modules">
-        {(workspaceLinks.length
-          ? workspaceLinks.slice(0, 3)
-          : details.sections.map((title) => [title, null])
-        ).map(([title, path]) => (
-          <article className="dashboard-module" key={title}>
-            <Clock3 size={23} />
-            <span className="coming-label">
-              {path ? 'Ready to use' : 'Upcoming feature'}
-            </span>
-            <h3>{path ? <Link to={path}>{title}</Link> : title}</h3>
-            <p>
-              {path
-                ? 'Open your food rescue workspace.'
-                : 'This module will be introduced in a future milestone.'}
-            </p>
-          </article>
-        ))}
-      </div>
-      <p className="dashboard-disclaimer">
-        {workspaceLinks.length
-          ? 'Listings, requests and history use real API data. No demonstration metrics are displayed.'
-          : 'No operational data or activity metrics are displayed. Your account and profile are live.'}
-      </p>
-      <Link
-        className="button button-outline overview-analytics"
-        to={`${base}/analytics`}
-      >
-        View your role’s analytics →
-      </Link>
-      <ProfileForm />
-    </>
   );
 }

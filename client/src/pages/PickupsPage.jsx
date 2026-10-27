@@ -11,16 +11,39 @@ import {
 } from '../components/DonationShared.jsx';
 import { formatTime } from '../utils/donation.js';
 import LocationMap from '../components/LocationMap.jsx';
-function Assignment({ assignment: a, refresh, detail = false }) {
+import { PickupProgress } from '../components/CommunityWorkflow.jsx';
+function Assignment({ assignment: a, refresh, detail = false, onSuccess }) {
   const { user } = useAuth();
   const [reason, setReason] = useState('');
   const base = `/dashboard/${user.role}/pickups/${a._id}`;
   async function act(action) {
-    await api(`/pickups/${a._id}${action === 'claim' ? '/claim' : ''}`, {
-      method: action === 'claim' ? 'POST' : 'PATCH',
-      body: action === 'claim' ? {} : { action, ...(reason ? { reason } : {}) },
-    });
-    refresh();
+    try {
+      await api(`/pickups/${a._id}${action === 'claim' ? '/claim' : ''}`, {
+        method: action === 'claim' ? 'POST' : 'PATCH',
+        body:
+          action === 'claim' ? {} : { action, ...(reason ? { reason } : {}) },
+      });
+      refresh();
+      onSuccess?.(
+        {
+          claim:
+            'Pickup claimed. Exact participant details are now available to you.',
+          start: 'Pickup started. The donor must confirm physical handover.',
+          release: 'Assignment released. The food reservation is unchanged.',
+          cancel:
+            'Transportation cancelled. The food reservation is unchanged.',
+          arrive: 'Arrival reported. The NGO must confirm actual receipt.',
+          report_failure:
+            'Issue recorded. Refresh status to see the latest assignment state.',
+        }[action],
+      );
+    } catch (failure) {
+      if (failure.status === 409 && user.role !== 'donor')
+        throw new Error(
+          `${failure.message} Refresh status to see the latest assignment; another volunteer may have claimed it.`,
+        );
+      throw failure;
+    }
   }
   const canMove =
     a.assignedToMe &&
@@ -78,6 +101,18 @@ function Assignment({ assignment: a, refresh, detail = false }) {
           })}
         </ol>
       )}
+      {['ngo', 'volunteer'].includes(user.role) && (
+        <PickupProgress status={a.status} />
+      )}
+      {user.role === 'volunteer' && (
+        <p className="community-custody-note">
+          {a.assignedToMe
+            ? 'You are responsible for this assignment. Donor handover and NGO receipt remain separate confirmations.'
+            : a.previouslyAssignedToMe
+              ? 'You previously handled this assignment. Current actions depend on the latest server state.'
+              : 'Review the pickup deadline before claiming. Exact stop details are shared only when authorized.'}
+        </p>
+      )}
       <p className="pickup-deadline">
         Pickup cutoff:{' '}
         {a.donation ? formatTime(a.donation.pickupDeadline) : 'Unavailable'}
@@ -131,6 +166,7 @@ function Assignment({ assignment: a, refresh, detail = false }) {
       <div className="hero-actions pickup-actions">
         {a.canClaim && (
           <ConfirmAction
+            className={user.role === 'volunteer' ? 'button' : undefined}
             label="Claim pickup"
             description="Take responsibility for collecting and delivering this accepted reservation. The donor must confirm actual handover and the NGO must confirm actual receipt."
             onConfirm={() => act('claim')}
@@ -138,6 +174,7 @@ function Assignment({ assignment: a, refresh, detail = false }) {
         )}
         {canMove && a.status === 'assigned' && (
           <ConfirmAction
+            className={user.role === 'volunteer' ? 'button' : undefined}
             label="Start pickup"
             description="Record that you are en route to collection. No food inventory changes until the existing donor and NGO confirmations."
             onConfirm={() => act('start')}
@@ -159,6 +196,7 @@ function Assignment({ assignment: a, refresh, detail = false }) {
         )}
         {a.assignedToMe && a.status === 'picked_up' && !a.arrivalReportedAt && (
           <ConfirmAction
+            className={user.role === 'volunteer' ? 'button' : undefined}
             label="Report arrival"
             description="Report arrival at the destination. Only the NGO can confirm receipt; this will not mark the donation delivered."
             onConfirm={() => act('arrive')}
@@ -213,11 +251,13 @@ function Assignment({ assignment: a, refresh, detail = false }) {
 export default function PickupsPage({ available = false }) {
   const { id } = useParams();
   const [page, setPage] = useState(1);
+  const [status, setStatus] = useState('');
+  const [notice, setNotice] = useState('');
   const { user } = useAuth();
   const result = useApiData(
     id
       ? `/pickups/${id}`
-      : `/pickups/${available ? 'available' : 'mine'}?page=${page}`,
+      : `/pickups/${available ? 'available' : 'mine'}?page=${page}${status ? `&status=${status}` : ''}`,
   );
   const title = id
     ? 'Pickup details'
@@ -254,16 +294,107 @@ export default function PickupsPage({ available = false }) {
         Refresh to see the latest participant confirmations. No continuous
         location tracking is used.
       </p>
+      {notice && (
+        <p className="donor-feedback" role="status">
+          {notice}
+        </p>
+      )}
+      {user.role === 'volunteer' &&
+        available &&
+        user.verificationStatus !== 'verified' && (
+          <div className="notice-panel">
+            <h2>Verification opens the way.</h2>
+            <p>
+              Only verified volunteers can browse and claim available
+              assignments. You can still review your profile and existing
+              assignment history.
+            </p>
+            <Link className="text-link" to="/dashboard/volunteer#profile">
+              Review your profile
+            </Link>
+          </div>
+        )}
+      {['ngo', 'volunteer'].includes(user.role) && !available && !id && (
+        <div className="donation-filters">
+          <label>
+            Assignment status
+            <select
+              value={status}
+              onChange={(event) => {
+                setStatus(event.target.value);
+                setPage(1);
+              }}
+            >
+              {[
+                '',
+                'awaiting_volunteer',
+                'assigned',
+                'en_route_to_pickup',
+                'picked_up',
+                'delivered',
+                'cancelled',
+              ].map((value) => (
+                <option key={value} value={value}>
+                  {value ? value.replaceAll('_', ' ') : 'All statuses'}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
       <DataState
         {...result}
         retry={result.refresh}
         empty={!id && result.data?.items.length === 0}
+        emptyContent={
+          user.role !== 'donor' ? (
+            <div className="workspace-state empty-state">
+              <h2>
+                {status
+                  ? 'No assignments with this status.'
+                  : available
+                    ? 'All quiet on the collection front.'
+                    : 'Every collection starts with a connection.'}
+              </h2>
+              <p>
+                {available
+                  ? 'New pickup opportunities appear when an NGO arranges transport for accepted food.'
+                  : 'Your authorized pickup activity will appear here, from collection to confirmed receipt.'}
+              </p>
+              {status ? (
+                <button
+                  className="button button-outline"
+                  onClick={() => {
+                    setStatus('');
+                    setPage(1);
+                  }}
+                >
+                  Show all assignments
+                </button>
+              ) : (
+                <Link
+                  className="button button-outline"
+                  to={
+                    user.role === 'volunteer'
+                      ? '/dashboard/volunteer/pickups/available'
+                      : '/dashboard/ngo/requests'
+                  }
+                >
+                  {user.role === 'volunteer'
+                    ? 'Browse pickups'
+                    : 'View my requests'}
+                </Link>
+              )}
+            </div>
+          ) : undefined
+        }
       >
         {id && result.data ? (
           <Assignment
             assignment={result.data.assignment}
             refresh={result.refresh}
             detail
+            onSuccess={user.role !== 'donor' ? setNotice : undefined}
           />
         ) : (
           <>
@@ -273,6 +404,7 @@ export default function PickupsPage({ available = false }) {
                   key={a._id}
                   assignment={a}
                   refresh={result.refresh}
+                  onSuccess={user.role !== 'donor' ? setNotice : undefined}
                 />
               ))}
             </div>

@@ -410,3 +410,196 @@ describe('donor image controls', () => {
     );
   });
 });
+
+describe('Phase 5 notification presentation and actions', () => {
+  it('marks all read through the existing endpoint and shows persisted read states', async () => {
+    let read = false;
+    fetch.mockImplementation(async (url, options) => {
+      if (options.method === 'PATCH') {
+        read = true;
+        return response({ unreadCount: 0 });
+      }
+      return response({
+        items: [{ ...note, readAt: read ? '2026-10-25T13:00:00Z' : null }],
+        unreadCount: read ? 0 : 1,
+        pagination: { page: 1, pages: 1, total: 1 },
+      });
+    });
+    mount(<NotificationsPage />);
+    await screen.findByText(note.message);
+    fireEvent.click(screen.getByRole('button', { name: 'Mark all read' }));
+    await screen.findByText('All notifications marked as read.');
+    expect(
+      await screen.findByText('Read', { exact: true }),
+    ).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/notifications/read-all',
+      expect.objectContaining({
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Protection': 'foodbridge',
+        },
+      }),
+    );
+  });
+  it('filters unread notifications and restores the full inbox from the empty state', async () => {
+    fetch.mockImplementation(async (url) =>
+      response({
+        items: url.includes('unread=true')
+          ? []
+          : [{ ...note, readAt: '2026-10-25T13:00:00Z' }],
+        unreadCount: 0,
+        pagination: { page: 1, pages: 1, total: 1 },
+      }),
+    );
+    mount(<NotificationsPage />);
+    await screen.findByText(note.message);
+    fireEvent.click(screen.getByLabelText('Unread only'));
+    await screen.findByText('You’re all caught up.');
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/notifications?page=1&limit=20&unread=true',
+      expect.anything(),
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Show all notifications' }),
+    );
+    await screen.findByText(note.message);
+  });
+  it('keeps unread state after a failed mutation and exposes a retryable error', async () => {
+    fetch.mockImplementation(async (url, options) =>
+      options.method === 'PATCH'
+        ? response({ error: { message: 'Unavailable' } }, 503)
+        : response({
+            items: [note],
+            unreadCount: 1,
+            pagination: { page: 1, pages: 1, total: 1 },
+          }),
+    );
+    mount(<NotificationsPage />);
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Mark as read' }),
+    );
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Unable to update',
+    );
+    expect(screen.getByText('Unread', { exact: true })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Mark as read' })).toBeEnabled();
+    expect(
+      screen.queryByText('Notification marked as read.'),
+    ).not.toBeInTheDocument();
+  });
+  it('disables duplicate read actions while the server is pending', async () => {
+    let finish;
+    fetch.mockImplementation(async (url, options) =>
+      options.method === 'PATCH'
+        ? new Promise((resolve) => {
+            finish = resolve;
+          })
+        : response({
+            items: [note],
+            unreadCount: 1,
+            pagination: { page: 1, pages: 1, total: 1 },
+          }),
+    );
+    mount(<NotificationsPage />);
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Mark as read' }),
+    );
+    expect(
+      screen.getByRole('button', { name: 'Marking read…' }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: 'Mark all read' }),
+    ).toBeDisabled();
+    expect(
+      fetch.mock.calls.filter(([, o]) => o.method === 'PATCH'),
+    ).toHaveLength(1);
+    await act(async () => finish(response({ notification: note })));
+  });
+  it.each([
+    ['admin', note, '/dashboard/admin/analytics'],
+    ['volunteer', note, '/dashboard/volunteer/pickups/request-one'],
+    ['volunteer', { ...note, requestId: null }, '/dashboard/volunteer/pickups'],
+    [
+      'ngo',
+      { ...note, requestId: null, donationId: 'donation-one' },
+      '/dashboard/ngo/donations/donation-one',
+    ],
+    ['donor', note, '/dashboard/donor/requests'],
+  ])(
+    'links %s notifications only to supported role routes',
+    async (role, item, path) => {
+      fetch.mockResolvedValue(
+        response({
+          items: [item],
+          unreadCount: 1,
+          pagination: { page: 1, pages: 1, total: 1 },
+        }),
+      );
+      mount(<NotificationsPage />, { ...user, role });
+      expect(
+        await screen.findByRole('link', { name: 'View activity' }),
+      ).toHaveAttribute('href', path);
+    },
+  );
+  it('offers a deliberate empty inbox without fabricated activity', async () => {
+    fetch.mockResolvedValue(
+      response({
+        items: [],
+        unreadCount: 0,
+        pagination: { page: 1, pages: 0, total: 0 },
+      }),
+    );
+    mount(<NotificationsPage />);
+    expect(
+      await screen.findByText('A little quiet, for now.'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Mark all read' }),
+    ).toBeDisabled();
+  });
+  it('keeps large unread counts accessible and closes on outside interaction', async () => {
+    fetch.mockResolvedValue(
+      response({
+        items: [note],
+        unreadCount: 123,
+        pagination: { page: 1, pages: 1, total: 1 },
+      }),
+    );
+    mount(<NotificationBell />);
+    const bell = await screen.findByRole('button', {
+      name: 'Notifications, 123 unread',
+    });
+    expect(screen.getByText('99+')).toBeInTheDocument();
+    fireEvent.click(bell);
+    await screen.findByText(note.message);
+    fireEvent.pointerDown(document.body);
+    expect(
+      screen.queryByRole('region', { name: 'Notifications' }),
+    ).not.toBeInTheDocument();
+  });
+  it('shows mark-all errors in the dropdown and retains durable unread count', async () => {
+    fetch.mockImplementation(async (url, options) =>
+      options.method === 'PATCH'
+        ? response({ error: { message: 'Unavailable' } }, 503)
+        : response({
+            items: [note],
+            unreadCount: 1,
+            pagination: { page: 1, pages: 1, total: 1 },
+          }),
+    );
+    mount(<NotificationBell />);
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Notifications, 1 unread' }),
+    );
+    await screen.findByText(note.message);
+    fireEvent.click(screen.getByRole('button', { name: 'Mark all read' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Unable to mark notifications read',
+    );
+    expect(
+      screen.getByRole('button', { name: 'Notifications, 1 unread' }),
+    ).toBeInTheDocument();
+  });
+});

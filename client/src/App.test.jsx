@@ -183,8 +183,8 @@ describe('sessions and role-based navigation', () => {
   });
   it.each([
     ['donor', 'A little surplus. A lot of possibility.'],
-    ['ngo', 'Bring more possibility to your community.'],
-    ['volunteer', 'Small actions move communities forward.'],
+    ['ngo', 'Good food. Greater possibility.'],
+    ['volunteer', 'Small actions. Meaningful connections.'],
     ['admin', 'A stronger foundation for shared good.'],
   ])('restores the %s dashboard', async (role, title) => {
     fetch.mockResolvedValue(
@@ -205,12 +205,16 @@ describe('sessions and role-based navigation', () => {
     ).toBeInTheDocument();
     if (role === 'donor')
       expect(screen.getByText('Active listings')).toBeInTheDocument();
-    else
+    else if (role === 'ngo')
+      expect(screen.getByText('Total requests')).toBeInTheDocument();
+    else if (role === 'volunteer')
+      expect(screen.getByText('Active assignments')).toBeInTheDocument();
+    else {
       expect(
-        screen.getAllByText(
-          role === 'admin' ? 'Upcoming feature' : 'Ready to use',
-        ),
-      ).toHaveLength(role === 'volunteer' ? 2 : 3);
+        screen.getByRole('heading', { name: 'Organization verification' }),
+      ).toBeInTheDocument();
+      expect(screen.queryByText('Upcoming feature')).not.toBeInTheDocument();
+    }
   });
   it('redirects the wrong frontend role to its own dashboard', async () => {
     fetch.mockResolvedValue(reply({ user: donor }));
@@ -290,10 +294,13 @@ describe('sessions and role-based navigation', () => {
     fireEvent.submit(screen.getByRole('form', { name: 'Registration' }));
     expect(
       await screen.findByRole('heading', {
-        name: 'Bring more possibility to your community.',
+        name: 'Good food. Greater possibility.',
       }),
     ).toBeInTheDocument();
-    const options = fetch.mock.calls.at(-1)[1];
+    const options = fetch.mock.calls.find(
+      ([url, options]) =>
+        url === '/api/auth/register' && options.method === 'POST',
+    )[1];
     expect(JSON.parse(options.body)).toMatchObject({
       role: 'ngo',
       organizationName: 'Campus Care',
@@ -341,10 +348,14 @@ describe('sessions and role-based navigation', () => {
     });
   });
   it('logs out and returns to login', async () => {
-    fetch.mockResolvedValueOnce(reply({ user: donor }));
+    const fallback = fetch.getMockImplementation();
+    fetch.mockImplementation(async (url, options) => {
+      if (url === '/api/auth/me') return reply({ user: donor });
+      if (url === '/api/auth/logout') return reply(null, 204);
+      return fallback(url, options);
+    });
     renderPage('/dashboard');
     await screen.findByRole('button', { name: 'Log out' });
-    fetch.mockResolvedValueOnce(reply(null, 204));
     fireEvent.click(screen.getByRole('button', { name: 'Log out' }));
     expect(
       await screen.findByRole('heading', { name: 'Log in to FoodBridge' }),
@@ -355,13 +366,17 @@ describe('sessions and role-based navigation', () => {
     );
   });
   it('shows logout failures from a dashboard subpage without losing the session', async () => {
-    fetch.mockResolvedValueOnce(reply({ user: donor }));
-    fetch.mockResolvedValueOnce(
-      reply({ items: [], unreadCount: 0, pagination: { page: 1, pages: 0 } }),
-    );
+    fetch.mockImplementation(async (url) => {
+      if (url === '/api/auth/me') return reply({ user: donor });
+      if (url === '/api/auth/logout') throw new Error('offline');
+      return reply({
+        items: [],
+        unreadCount: 0,
+        pagination: { page: 1, pages: 0 },
+      });
+    });
     renderPage('/dashboard/donor/notifications');
     await screen.findByRole('heading', { name: 'Notification center' });
-    fetch.mockRejectedValueOnce(new Error('offline'));
     fireEvent.click(screen.getByRole('button', { name: 'Log out' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Unable to log out',
@@ -371,10 +386,14 @@ describe('sessions and role-based navigation', () => {
     ).toBeInTheDocument();
   });
   it('retains the session and offers feedback if logout fails', async () => {
-    fetch.mockResolvedValueOnce(reply({ user: donor }));
+    const fallback = fetch.getMockImplementation();
+    fetch.mockImplementation(async (url, options) => {
+      if (url === '/api/auth/me') return reply({ user: donor });
+      if (url === '/api/auth/logout') throw new Error('offline');
+      return fallback(url, options);
+    });
     renderPage('/dashboard');
     await screen.findByRole('button', { name: 'Log out' });
-    fetch.mockRejectedValueOnce(new Error('offline'));
     fireEvent.click(screen.getByRole('button', { name: 'Log out' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Unable to log out',

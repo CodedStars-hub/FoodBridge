@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Compass, MapPin } from 'lucide-react';
 import { useAuth } from '../auth/useAuth.js';
 import { useApiData } from '../hooks/useApiData.js';
 import {
@@ -10,9 +12,54 @@ import LocationMap from '../components/LocationMap.jsx';
 import { unitOptions, categoryOptions, readable } from '../utils/donation.js';
 function Results({ query, ranked }) {
   const [page, setPage] = useState(1);
+  const [selectedId, setSelectedId] = useState(null);
   const result = useApiData(
     `/donations/${ranked ? 'recommendations' : 'nearby'}?${new URLSearchParams({ ...query, page })}`,
   );
+  const selected =
+    result.data?.items.find((d) => d._id === selectedId) ||
+    result.data?.items[0];
+  function mapPanel() {
+    return (
+      <aside>
+        <LocationMap
+          approximate
+          onSelect={setSelectedId}
+          selectedId={selected?._id}
+          points={(result.data?.items || []).map((d) => ({
+            id: d._id,
+            label: d.title,
+            location: d.areaLocation || d.location,
+          }))}
+        />
+        <section
+          className="community-map-preview"
+          aria-label="Selected donation preview"
+          aria-live="polite"
+        >
+          <p className="eyebrow">Selected donation</p>
+          <h3>{selected?.title}</h3>
+          <p>
+            {selected?.remainingQuantity} {selected?.unit} available
+          </p>
+          <p>{selected?.pickupLocation}</p>
+          {typeof (selected?.distanceKm ?? selected?.match?.distanceKm) ===
+            'number' && (
+            <p>
+              {(selected.distanceKm ?? selected.match.distanceKm).toFixed(1)} km
+              approximate straight-line distance
+            </p>
+          )}
+          <Link
+            className="text-link"
+            to={`/dashboard/ngo/donations/${selected?._id}`}
+          >
+            View selected donation →
+          </Link>
+        </section>
+      </aside>
+    );
+  }
   return (
     <>
       <DataState {...result} retry={result.refresh} empty={false}>
@@ -35,69 +82,115 @@ function Results({ query, ranked }) {
               </div>
             ) : (
               <>
-                <LocationMap
-                  approximate
-                  points={result.data.items.map((d) => ({
-                    label: d.title,
-                    location: d.areaLocation || d.location,
-                  }))}
-                />
-                <div className="donations-grid">
-                  {result.data.items.map((d) => (
-                    <div className="recommendation" key={d._id}>
-                      <DonationCard donation={d} />
-                      {d.match && (
-                        <section
-                          className="match-explanation"
-                          aria-label={`Match explanation for ${d.title}`}
-                        >
-                          <div>
-                            <strong>{d.match.score.toFixed(1)} / 100</strong>
-                            <span>
-                              Explainable match · full requested quantity
-                            </span>
-                          </div>
-                          {[
-                            ['distance', 'Distance suitability'],
-                            ['quantity', 'Quantity suitability'],
-                            ['pickupTime', 'Pickup window suitability'],
-                          ].map(([key, label]) => (
-                            <p key={key}>
-                              <span>
-                                {label} ·{' '}
-                                {(d.match.weights[key] * 100).toFixed(0)}%
-                                weight
-                              </span>
+                <div
+                  className={
+                    ranked
+                      ? 'community-ranked-results'
+                      : 'community-results-layout'
+                  }
+                >
+                  <div>
+                    <div className="donations-grid">
+                      {result.data.items.map((d, index) => (
+                        <div className="recommendation" key={d._id}>
+                          {ranked && (
+                            <div className="community-rank">
                               <strong>
-                                {d.match.components[key].toFixed(1)}/100
+                                Match{' '}
+                                {((result.data.pagination?.page || page) - 1) *
+                                  (result.data.pagination?.limit || 12) +
+                                  index +
+                                  1}
                               </strong>
+                              <span>Ranked by your search</span>
+                            </div>
+                          )}
+                          <DonationCard donation={d} />
+                          {d.match && (
+                            <section
+                              className="match-explanation"
+                              aria-label={`Match explanation for ${d.title}`}
+                            >
+                              <div>
+                                <strong>
+                                  {d.match.score.toFixed(1)} / 100
+                                </strong>
+                                <span>
+                                  Explainable match · full requested quantity
+                                </span>
+                              </div>
+                              <div
+                                className="community-score-track"
+                                aria-hidden="true"
+                              >
+                                <i
+                                  style={{
+                                    width: `${Math.min(100, Math.max(0, d.match.score))}%`,
+                                  }}
+                                />
+                              </div>
+                              {[
+                                ['distance', 'Distance suitability'],
+                                ['quantity', 'Quantity suitability'],
+                                ['pickupTime', 'Pickup window suitability'],
+                              ].map(([key, label]) => (
+                                <p key={key}>
+                                  <span>
+                                    {label} ·{' '}
+                                    {(d.match.weights[key] * 100).toFixed(0)}%
+                                    weight
+                                  </span>
+                                  <strong>
+                                    {d.match.components[key].toFixed(1)}/100
+                                  </strong>
+                                </p>
+                              ))}
+                              <small>
+                                {d.match.distanceKm.toFixed(1)} km approximate
+                                straight-line distance ·{' '}
+                                {d.match.availableQuantity} {d.match.unit}{' '}
+                                available for {d.match.requestedQuantity}{' '}
+                                requested · {d.match.minutesRemaining} minutes
+                                until pickup cutoff. Quantity favours a closer
+                                fit; pickup time favours more time remaining, up
+                                to {d.match.windowMinutes} minutes.
+                              </small>
+                            </section>
+                          )}
+                          {!ranked && (
+                            <button
+                              className="button button-outline community-select"
+                              aria-pressed={selected?._id === d._id}
+                              onClick={() => setSelectedId(d._id)}
+                            >
+                              Preview {d.title}
+                            </button>
+                          )}
+                          {!ranked && (
+                            <p className="field-hint distance-note">
+                              {d.distanceKm.toFixed(1)} km approximate
+                              straight-line distance
                             </p>
-                          ))}
-                          <small>
-                            {d.match.distanceKm.toFixed(1)} km approximate
-                            straight-line distance · {d.match.availableQuantity}{' '}
-                            {d.match.unit} available for{' '}
-                            {d.match.requestedQuantity} requested ·{' '}
-                            {d.match.minutesRemaining} minutes until pickup
-                            cutoff. Quantity favours a closer fit; pickup time
-                            favours more time remaining, up to{' '}
-                            {d.match.windowMinutes} minutes.
-                          </small>
-                        </section>
-                      )}
-                      {!ranked && (
-                        <p className="field-hint distance-note">
-                          {d.distanceKm.toFixed(1)} km approximate straight-line
-                          distance
-                        </p>
-                      )}
+                          )}
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                    <Pagination
+                      pagination={result.data.pagination}
+                      onPage={(next) => {
+                        setPage(next);
+                        setSelectedId(null);
+                      }}
+                    />
+                  </div>
+                  {!ranked && mapPanel()}
                 </div>
-                <Pagination
-                  pagination={result.data.pagination}
-                  onPage={setPage}
-                />
+                {ranked && (
+                  <details className="community-match-map">
+                    <summary>Explore these matches on an area map</summary>
+                    {mapPanel()}
+                  </details>
+                )}
               </>
             )}
           </>
@@ -152,6 +245,21 @@ export default function DiscoveryPage({ ranked = false }) {
         onSubmit={submit}
         aria-label="Donation discovery"
       >
+        <div className="community-discovery-heading">
+          {ranked ? <Compass size={27} /> : <MapPin size={27} />}
+          <div>
+            <h2>
+              {ranked
+                ? 'A better fit for your community.'
+                : 'Good food, closer to you.'}
+            </h2>
+            <p>
+              {ranked
+                ? 'Tell us what you need. Each match uses the server’s distance, quantity and pickup-window scores.'
+                : 'Search around your saved location, or enter a different starting point.'}
+            </p>
+          </div>
+        </div>
         <div className="profile-fields">
           <label>
             Longitude
@@ -237,6 +345,32 @@ export default function DiscoveryPage({ ranked = false }) {
           {ranked ? 'Find recommendations' : 'Find nearby food'}
         </button>
       </form>
+      {!search && (
+        <div className="community-discovery-intro">
+          <h2>
+            {user.location
+              ? 'Your starting point is ready.'
+              : 'Start with a place.'}
+          </h2>
+          <p>
+            {user.location
+              ? 'Your saved profile location is available for this search. Set your preferences above to discover real available listings.'
+              : 'Add a private profile location or enter both coordinates above. You can browse Explore donations without a location.'}
+          </p>
+          <Link
+            className="text-link"
+            to={
+              user.location
+                ? '/dashboard/ngo/explore'
+                : '/dashboard/ngo#profile'
+            }
+          >
+            {user.location
+              ? 'Browse all available food →'
+              : 'Add your profile location →'}
+          </Link>
+        </div>
+      )}
       {search && (
         <Results
           key={`${JSON.stringify(search)}:${searchVersion}`}

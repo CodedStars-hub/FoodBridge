@@ -231,6 +231,8 @@ Tests use real MongoDB transactions and image decoding with a mocked Cloudinary 
 
 ## Production-readiness audit
 
+The latest assessment is [the final pre-deployment readiness audit](docs/final-production-readiness.md). It supersedes historical external-service findings, records the live isolated Cloudinary checks and identifies the current Atlas privilege and hosting/operations release gates. The current production recommendation is NO-GO pending those gates; no deployment was performed.
+
 See [the production-readiness report](docs/production-readiness-audit.md) for verified feature coverage, remaining release blockers, cookie/domain recommendations, job scheduling and exact build/start prerequisites. The audit does not deploy the application. Cloudinary provider setup and hosted authentication verification remain manual.
 
 ## Milestone 6B: backend production hardening

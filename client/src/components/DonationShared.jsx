@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Clock3, Leaf, MapPin, ArrowRight } from 'lucide-react';
 import { readable, formatTime } from '../utils/donation.js';
+import DonationPhoto from './DonationPhoto.jsx';
 import { useAuth } from '../auth/useAuth.js';
 export function StatusBadge({ status }) {
   return (
@@ -77,15 +78,12 @@ export function DonationCard({ donation }) {
   const { user } = useAuth();
   return (
     <article className="donation-card">
-      {donation.image?.secureUrl && (
-        <img
-          className="donation-card-image"
-          src={donation.image.secureUrl}
-          alt={donation.title}
-          loading="lazy"
-          referrerPolicy="no-referrer"
+      <div className="community-food-photo">
+        <DonationPhoto
+          key={donation.image?.secureUrl || donation._id}
+          donation={donation}
         />
-      )}
+      </div>
       <div className="donation-card-top">
         <span className="food-category">
           <Leaf size={17} />

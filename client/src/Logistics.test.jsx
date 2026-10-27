@@ -264,7 +264,9 @@ describe('volunteer logistics and participant tracking', () => {
       ).toBe(true),
     );
     expect(
-      await screen.findByRole('heading', { name: 'Nothing here just yet.' }),
+      await screen.findByRole('heading', {
+        name: 'All quiet on the collection front.',
+      }),
     ).toBeInTheDocument();
   });
   it('shows donor-confirmed custody and arrival reporting but no volunteer receipt control', async () => {

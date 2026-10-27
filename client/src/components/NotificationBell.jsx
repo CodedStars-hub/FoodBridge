@@ -3,13 +3,20 @@ import { Link } from 'react-router-dom';
 import { Bell, CheckCheck } from 'lucide-react';
 import { useAuth } from '../auth/useAuth.js';
 import { useInbox } from '../hooks/useInbox.js';
-import { inboxChanged, markRead, markAllRead } from '../utils/inbox.js';
+import {
+  inboxChanged,
+  markRead,
+  markAllRead,
+  notificationTarget,
+} from '../utils/inbox.js';
 export default function NotificationBell() {
   const { user } = useAuth();
   const inbox = useInbox();
   const [open, setOpen] = useState(false);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState('');
+  const [pending, setPending] = useState(false);
+  const [notice, setNotice] = useState('');
   const button = useRef(null);
   const root = useRef(null);
   const id = useId();
@@ -67,11 +74,31 @@ export default function NotificationBell() {
   }, [open]);
   const count = inbox.data?.unreadCount;
   async function read(id) {
+    if (pending) return;
+    setPending(true);
+    setError('');
     try {
       await markRead(id);
       setOpen(false);
+      button.current?.focus();
     } catch {
       setError('Unable to mark notification read. Please retry.');
+    } finally {
+      setPending(false);
+    }
+  }
+  async function readAll() {
+    if (pending) return;
+    setPending(true);
+    setError('');
+    setNotice('');
+    try {
+      await markAllRead();
+      setNotice('All notifications marked as read.');
+    } catch {
+      setError('Unable to mark notifications read. Please retry.');
+    } finally {
+      setPending(false);
     }
   }
   return (
@@ -88,7 +115,11 @@ export default function NotificationBell() {
         aria-controls={id}
         onClick={() => {
           setOpen(!open);
-          if (!open) inbox.refresh();
+          if (!open) {
+            setError('');
+            setNotice('');
+            inbox.refresh();
+          }
         }}
       >
         <Bell size={19} />
@@ -113,7 +144,7 @@ export default function NotificationBell() {
             </span>
           </div>
           {inbox.loading ? (
-            <p>Loading notifications…</p>
+            <p role="status">Loading notifications…</p>
           ) : inbox.error ? (
             <p role="alert">
               Notifications are unavailable. Open the center to retry.
@@ -128,10 +159,13 @@ export default function NotificationBell() {
               {inbox.data?.items.map((item) => (
                 <li key={item.id} className={item.readAt ? '' : 'unread'}>
                   <Link
-                    to={`/dashboard/${user.role}/${user.role === 'volunteer' && item.requestId ? `pickups/${item.requestId}` : 'requests'}`}
+                    to={notificationTarget(user.role, item)}
                     onClick={() => void read(item.id)}
                   >
-                    {item.message}
+                    <span className="inbox-read-state">
+                      {item.readAt ? 'Read' : 'Unread'}
+                    </span>
+                    <span className="notification-message">{item.message}</span>
                     <time dateTime={item.createdAt}>
                       {new Date(item.createdAt).toLocaleString()}
                     </time>
@@ -139,6 +173,11 @@ export default function NotificationBell() {
                 </li>
               ))}
             </ul>
+          )}
+          {notice && (
+            <p role="status" className="inbox-feedback">
+              {notice}
+            </p>
           )}
           {error && (
             <p role="alert" className="field-error">
@@ -148,15 +187,11 @@ export default function NotificationBell() {
           <div className="notification-bottom">
             <button
               className="text-link"
-              disabled={!count}
-              onClick={() => {
-                void markAllRead().catch(() =>
-                  setError('Unable to mark notifications read'),
-                );
-              }}
+              disabled={pending || !count}
+              onClick={readAll}
             >
               <CheckCheck size={15} />
-              Mark all read
+              {pending ? 'Updating…' : 'Mark all read'}
             </button>
             <Link
               className="text-link"

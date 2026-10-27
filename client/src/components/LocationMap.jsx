@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import 'leaflet/dist/leaflet.css';
-export default function LocationMap({ points = [], approximate = false }) {
+export default function LocationMap({
+  points = [],
+  approximate = false,
+  onSelect,
+  selectedId,
+}) {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState('');
   const container = useRef(null);
@@ -12,6 +17,7 @@ export default function LocationMap({ points = [], approximate = false }) {
     if (!open || !data.length) return;
     let disposed = false;
     let map;
+    let observer;
     import('leaflet')
       .then((module) => {
         if (disposed) return;
@@ -40,16 +46,24 @@ export default function LocationMap({ points = [], approximate = false }) {
           const label = document.createElement('span');
           label.textContent = point.label;
           L.circleMarker([lat, lng], {
-            radius: 7,
+            radius: point.id && point.id === selectedId ? 10 : 7,
             color: index === 0 ? '#174d38' : '#c96a3d',
             fillOpacity: 0.8,
           })
             .bindPopup(label)
+            .on('click', () => {
+              if (point.id) onSelect?.(point.id);
+            })
             .addTo(map);
           return [lat, lng];
         });
+        observer = new ResizeObserver(() =>
+          map?.invalidateSize({ animate: false }),
+        );
+        observer.observe(container.current);
         map.fitBounds(L.latLngBounds(locations).pad(0.25), {
           maxZoom: approximate ? 12 : 15,
+          animate: false,
         });
       })
       .catch(() =>
@@ -59,9 +73,10 @@ export default function LocationMap({ points = [], approximate = false }) {
       );
     return () => {
       disposed = true;
+      observer?.disconnect();
       map?.remove();
     };
-  }, [open, pointKey, approximate]);
+  }, [open, pointKey, approximate, onSelect, selectedId]);
   if (JSON.parse(pointKey).length === 0)
     return (
       <p className="field-hint map-missing">
@@ -84,6 +99,7 @@ export default function LocationMap({ points = [], approximate = false }) {
         </div>
         <button
           className="button button-outline"
+          aria-expanded={open}
           onClick={() => {
             setMessage('');
             setOpen(!open);

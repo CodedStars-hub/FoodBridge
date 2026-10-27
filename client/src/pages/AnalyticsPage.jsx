@@ -1,4 +1,10 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { CalendarRange } from 'lucide-react';
+import {
+  AnalyticsMetrics,
+  RoleCounts,
+} from '../components/AnalyticsSummary.jsx';
 import {
   ResponsiveContainer,
   LineChart,
@@ -12,50 +18,25 @@ import {
 import { useAuth } from '../auth/useAuth.js';
 import { useApiData } from '../hooks/useApiData.js';
 import { DataState } from '../components/DonationShared.jsx';
-const cards = {
-  donor: [
-    ['totalDonations', 'Total donations'],
-    ['activeDonations', 'Active donations'],
-    ['completedDonations', 'Completed donations'],
-    ['completedReceipts', 'Confirmed receipts'],
-  ],
-  ngo: [
-    ['totalRequests', 'Total requests'],
-    ['acceptedRequests', 'Accepted / awaiting receipt'],
-    ['completedReceipts', 'Completed receipts'],
-  ],
-  volunteer: [
-    ['availableAssignments', 'Available assignments · live'],
-    ['activeAssignments', 'Active assignments · live'],
-    ['completedPickups', 'Completed pickups'],
-  ],
-  admin: [
-    ['totalUsers', 'Registered users'],
-    ['totalDonations', 'Total donations'],
-    ['completedDonations', 'Completed donations'],
-    ['activeDonations', 'Active food listings'],
-    ['completedReceipts', 'Confirmed receipts'],
-    ['completionRate', 'Donation completion rate'],
-  ],
-};
 const chartSeries = {
   donor: [
-    ['donations', 'Created donations', '#174d38'],
-    ['receipts', 'Confirmed receipts', '#c96a3d'],
+    ['donations', 'Created donations', '#233d2d'],
+    ['receipts', 'Confirmed receipts', '#a64f2d'],
   ],
   ngo: [
-    ['requests', 'Created requests', '#174d38'],
-    ['receipts', 'Confirmed receipts', '#c96a3d'],
+    ['requests', 'Created requests', '#233d2d'],
+    ['receipts', 'Confirmed receipts', '#a64f2d'],
   ],
-  volunteer: [['pickups', 'Completed pickups', '#174d38']],
+  volunteer: [['pickups', 'Completed pickups', '#233d2d']],
   admin: [
-    ['donations', 'Created donations', '#174d38'],
-    ['receipts', 'Confirmed receipts', '#c96a3d'],
-    ['users', 'Registered users', '#537c96'],
+    ['donations', 'Created donations', '#233d2d'],
+    ['receipts', 'Confirmed receipts', '#a64f2d'],
+    ['users', 'Registered users', '#657c50'],
   ],
 };
 export default function AnalyticsPage() {
   const { user } = useAuth();
+  const dateFrom = useRef(null);
   const [draft, setDraft] = useState(() => {
     const now = new Date();
     return {
@@ -74,6 +55,7 @@ export default function AnalyticsPage() {
     event.preventDefault();
     if (draft.from > draft.to) {
       setError('Start date must be before the end date');
+      dateFrom.current?.focus();
       return;
     }
     setError('');
@@ -82,8 +64,11 @@ export default function AnalyticsPage() {
   }
   const data = result.data;
   const series = chartSeries[user.role];
+  const hasActivity = data?.monthly.some((row) =>
+    series.some(([key]) => row[key] > 0),
+  );
   return (
-    <section className="workspace-page">
+    <section className="workspace-page insights-page">
       <div className="workspace-title">
         <div>
           <span className="eyebrow">REAL ACTIVITY. CLEAR ACCOUNTING.</span>
@@ -112,6 +97,11 @@ export default function AnalyticsPage() {
           From
           <input
             type="date"
+            ref={dateFrom}
+            aria-invalid={!!error}
+            aria-describedby={
+              error ? 'analytics-range-error' : 'analytics-range-hint'
+            }
             required
             value={draft.from}
             onChange={(e) => setDraft({ ...draft, from: e.target.value })}
@@ -127,98 +117,119 @@ export default function AnalyticsPage() {
           />
         </label>
         <button className="button">Apply date range</button>
-        <span>Inclusive dates · UTC · maximum two years</span>
+        <span id="analytics-range-hint">
+          <CalendarRange size={16} aria-hidden="true" />
+          Inclusive dates · UTC · maximum two years
+        </span>
       </form>
       {error && (
-        <p className="form-alert" role="alert">
+        <p className="form-alert" role="alert" id="analytics-range-error">
           {error}
         </p>
       )}
       <DataState {...result} retry={result.refresh}>
         {data && (
           <>
-            <div className="analytics-grid">
-              {cards[user.role].map(([key, label]) => (
-                <article className="analytics-card" key={key}>
-                  <span>{label}</span>
-                  <strong>
-                    {key === 'completionRate'
-                      ? `${data.summary[key].toFixed(1)}%`
-                      : data.summary[key].toLocaleString()}
-                  </strong>
-                </article>
-              ))}
+            <div className="analytics-period">
+              <span className="eyebrow">Applied date range</span>
+              <p>
+                {data.range.from} – {data.range.to} · UTC
+              </p>
+              <p className="analytics-period-note">
+                {user.role === 'volunteer'
+                  ? 'Available and active counts are live snapshots; completions use NGO receipt dates.'
+                  : user.role === 'ngo'
+                    ? 'Request totals use request creation dates; completed receipts use receipt dates.'
+                    : user.role === 'donor'
+                      ? 'Donation totals use listing creation dates; confirmed receipts use receipt dates.'
+                      : 'Registrations and listing totals use creation dates; confirmed receipts use receipt dates.'}
+              </p>
             </div>
+            <AnalyticsMetrics role={user.role} summary={data.summary} />
             {data.usersByRole && (
               <section className="profile-card analytics-section">
                 <h2>Users by role</h2>
-                <div className="role-counts">
-                  {data.usersByRole.map((row) => (
-                    <p key={row.role}>
-                      <span>{row.role}</span>
-                      <strong>{row.count}</strong>
-                    </p>
-                  ))}
-                </div>
+                <p>Accounts registered in the selected date range.</p>
+                <RoleCounts rows={data.usersByRole} />
               </section>
             )}
-            <figure className="profile-card analytics-chart">
+            <figure
+              className="profile-card analytics-chart"
+              aria-labelledby="monthly-chart-title"
+            >
               <figcaption id="monthly-chart-title">
                 <h2>Monthly activity</h2>
-                <p>Counts of recorded actions, not a combined food quantity.</p>
+                <p>
+                  Counts of recorded actions, not a combined food quantity. Each
+                  line is a separate activity type; exact monthly counts are in
+                  the table below.
+                </p>
               </figcaption>
-              {data.monthly.every((row) =>
-                series.every(([key]) => !row[key]),
-              ) && (
+              {!hasActivity && (
                 <p className="analytics-empty">
                   No monthly activity in this range. No sample data is
                   displayed.
                 </p>
               )}
-              <div className="chart-canvas">
-                <ResponsiveContainer
-                  width="100%"
-                  height={270}
-                  minWidth={0}
-                  initialDimension={{ width: 600, height: 270 }}
+              {hasActivity && (
+                <div
+                  className="chart-canvas"
+                  role="group"
+                  aria-label="Monthly activity chart; exact values are available in the table below"
                 >
-                  <LineChart
-                    data={data.monthly}
-                    accessibilityLayer
-                    aria-label="Monthly activity counts"
+                  <ResponsiveContainer
+                    width="100%"
+                    height={270}
+                    minWidth={0}
+                    initialDimension={{ width: 600, height: 270 }}
+                    debounce={80}
                   >
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      vertical={false}
-                      stroke="#e3e9da"
-                    />
-                    <XAxis
-                      dataKey="month"
-                      tick={{ fontSize: 10 }}
-                      minTickGap={25}
-                    />
-                    <YAxis
-                      allowDecimals={false}
-                      tick={{ fontSize: 10 }}
-                      width={35}
-                    />
-                    <Tooltip />
-                    <Legend wrapperStyle={{ fontSize: 11 }} />
-                    {series.map(([key, label, color]) => (
-                      <Line
-                        key={key}
-                        type="monotone"
-                        dataKey={key}
-                        name={label}
-                        stroke={color}
-                        strokeWidth={2}
-                        dot={false}
-                        isAnimationActive={false}
+                    <LineChart
+                      data={data.monthly}
+                      accessibilityLayer
+                      aria-label="Monthly activity counts"
+                    >
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        vertical={false}
+                        stroke="#dfe2d4"
                       />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+                      <XAxis
+                        dataKey="month"
+                        tick={{ fontSize: 12, fill: '#636859' }}
+                        minTickGap={25}
+                      />
+                      <YAxis
+                        allowDecimals={false}
+                        tick={{ fontSize: 12, fill: '#636859' }}
+                        width={35}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          background: '#fcfbf7',
+                          border: '1px solid #cdd4c0',
+                          borderRadius: 6,
+                          color: '#282d25',
+                          fontSize: 13,
+                        }}
+                      />
+                      <Legend wrapperStyle={{ fontSize: 12 }} />
+                      {series.map(([key, label, color]) => (
+                        <Line
+                          key={key}
+                          type="linear"
+                          dataKey={key}
+                          name={label}
+                          stroke={color}
+                          strokeWidth={2}
+                          dot={false}
+                          isAnimationActive={false}
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
               <details className="chart-table">
                 <summary>View chart data as a table</summary>
                 <div className="table-scroll">
@@ -309,7 +320,11 @@ export default function AnalyticsPage() {
                         {data.pickupHistory.map((row) => (
                           <tr key={row._id}>
                             <th scope="row">
-                              {row.title || 'Donation unavailable'}
+                              <Link
+                                to={`/dashboard/volunteer/pickups/${row._id}`}
+                              >
+                                {row.title || 'Donation unavailable'}
+                              </Link>
                             </th>
                             <td>{row.status.replaceAll('_', ' ')}</td>
                             <td>

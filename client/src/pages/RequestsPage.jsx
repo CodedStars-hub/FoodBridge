@@ -118,15 +118,22 @@ function RequestCard({ request, refresh, history, onSuccess }) {
             onConfirm={async () => {
               await api(`/requests/${request._id}/pickup`, { method: 'POST' });
               refresh();
+              onSuccess?.(
+                'Volunteer pickup arranged. Follow its progress in delivery tracking.',
+              );
             }}
           />
         )}
       {request.resolutionReason && (
         <p className="field-hint">{request.resolutionReason}</p>
       )}
-      {user.role === 'donor' && history && (
+      {((user.role === 'donor' && history) || user.role === 'ngo') && (
         <ol
-          className="donor-reservation-timeline"
+          className={
+            user.role === 'donor'
+              ? 'donor-reservation-timeline'
+              : 'community-timeline'
+          }
           aria-label="Reservation timeline"
         >
           {[
@@ -161,7 +168,9 @@ function RequestCard({ request, refresh, history, onSuccess }) {
               description={actionDescriptions[action]}
               onConfirm={() => transition(action)}
               className={
-                user.role === 'donor' && ['accept', 'handover'].includes(action)
+                (user.role === 'donor' &&
+                  ['accept', 'handover'].includes(action)) ||
+                (user.role === 'ngo' && action === 'receive')
                   ? 'button'
                   : 'button button-outline'
               }
@@ -200,7 +209,7 @@ export default function RequestsPage({ history = false }) {
           </p>
         </div>
       </div>
-      {user.role === 'donor' && notice && (
+      {notice && (
         <p role="status" className="donor-feedback">
           {notice}
         </p>
@@ -275,7 +284,37 @@ export default function RequestsPage({ history = false }) {
                 </Link>
               )}
             </div>
-          ) : undefined
+          ) : (
+            <div className="workspace-state empty-state">
+              <h2>
+                {status
+                  ? 'No requests with this status.'
+                  : history
+                    ? 'Your receipt history starts here.'
+                    : 'Find food for your community.'}
+              </h2>
+              <p>
+                {status
+                  ? 'Try another status to find a request.'
+                  : 'Your food requests and recorded progress will appear here.'}
+              </p>
+              {status ? (
+                <button
+                  className="button button-outline"
+                  onClick={() => {
+                    setStatus('');
+                    setPage(1);
+                  }}
+                >
+                  Show all statuses
+                </button>
+              ) : (
+                <Link className="button" to="/dashboard/ngo/explore">
+                  Browse donations
+                </Link>
+              )}
+            </div>
+          )
         }
       >
         <div className="requests-list">
@@ -285,7 +324,7 @@ export default function RequestsPage({ history = false }) {
               request={request}
               refresh={result.refresh}
               history={history}
-              onSuccess={user.role === 'donor' ? setNotice : undefined}
+              onSuccess={setNotice}
             />
           ))}
         </div>
