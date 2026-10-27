@@ -1515,6 +1515,12 @@ describe('persistent notifications and transactional outbox', () => {
       }),
     };
     expect(await dispatchNotifications(failing)).toBe(0);
+    await expect(
+      dispatchNotifications(failing, { failOnError: true }),
+    ).rejects.toMatchObject({
+      name: 'JobFailure',
+      code: 'JOB_PARTIAL_FAILURE',
+    });
     expect(await Notification.countDocuments({ broadcastAt: null })).toBe(
       pendingCount,
     );
@@ -1960,5 +1966,37 @@ describe('audit input hardening', () => {
     expect((await call('post', `/api/donations/${d._id}/cancel`)).status).toBe(
       200,
     );
+  });
+});
+
+describe('production hardening integration', () => {
+  it('reports ready against the initialized real replica set', async () => {
+    const response = await request(app).get('/api/health/ready');
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      status: 'ready',
+      application: 'FoodBridge',
+    });
+  });
+  it('exposes cleanup failures to the job runner while retaining retryable tasks', async () => {
+    configureImageProvider();
+    const d = await donation();
+    const publicId = `foodbridge/donations/${d._id}/00000000-0000-4000-8000-000000000000`;
+    await ImageCleanupTask.create({ publicId, readyAfter: new Date(0) });
+    vi.mocked(cloudClient.destroyCloudImage).mockRejectedValueOnce(
+      new Error('private-provider-failure'),
+    );
+    const result = await cleanupImages(imageConfig);
+    expect(result).toMatchObject({ removed: 0, failed: 1, pending: true });
+    expect((await ImageCleanupTask.findOne({ publicId })).attempts).toBe(1);
+    await ImageCleanupTask.updateOne(
+      { publicId },
+      { $set: { readyAfter: new Date(0) } },
+    );
+    expect(await cleanupImages(imageConfig)).toMatchObject({
+      removed: 1,
+      failed: 0,
+      pending: false,
+    });
   });
 });

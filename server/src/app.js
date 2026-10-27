@@ -1,4 +1,7 @@
 import express from 'express';
+import { trustedProxy } from './config/proxy.js';
+import { createLogger } from './utils/logger.js';
+import { requestLogging } from './middleware/requestLogging.js';
 import { createImageRoutes } from './routes/imageRoutes.js';
 import { createNotificationRoutes } from './routes/notificationRoutes.js';
 import { createAnalyticsRoutes } from './routes/analyticsRoutes.js';
@@ -17,19 +20,33 @@ import {
 } from './routes/donationRoutes.js';
 import healthRoutes from './routes/healthRoutes.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
-export function createApp(config = parseEnvironment()) {
+export function createApp(
+  config = parseEnvironment(),
+  { logger = createLogger({ environment: config.NODE_ENV }) } = {},
+) {
   const app = express();
   app.set('config', config);
+  app.set('logger', logger);
+  app.set('trust proxy', trustedProxy(config));
   app.disable('x-powered-by');
+  app.use(requestLogging(logger));
   app.use(helmet());
   app.use(cors({ origin: config.CLIENT_ORIGINS, credentials: true }));
   app.use(cookieParser());
   app.use(express.json({ limit: config.JSON_BODY_LIMIT }));
-  app.use('/api/health', healthRoutes);
+  app.use(
+    '/api/health',
+    (_req, res, next) => {
+      res.locals.routeBase = '/api/health';
+      next();
+    },
+    healthRoutes,
+  );
   app.use(
     '/api/auth',
     (_req, res, next) => {
       res.set('Cache-Control', 'no-store');
+      res.locals.routeBase = '/api/auth';
       next();
     },
     csrfProtection(config),
@@ -40,6 +57,7 @@ export function createApp(config = parseEnvironment()) {
     '/api/users',
     (_req, res, next) => {
       res.set('Cache-Control', 'no-store');
+      res.locals.routeBase = '/api/users';
       next();
     },
     csrfProtection(config),
@@ -58,6 +76,7 @@ export function createApp(config = parseEnvironment()) {
       path,
       (_req, res, next) => {
         res.set('Cache-Control', 'no-store');
+        res.locals.routeBase = path;
         next();
       },
       csrfProtection(config),

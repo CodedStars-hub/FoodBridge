@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { rateLimit } from 'express-rate-limit';
+import { rateLimit, ipKeyGenerator } from 'express-rate-limit';
+import { isIP } from 'node:net';
 import { authController } from '../controllers/authController.js';
 import { requireAuth } from '../middleware/auth.js';
 export function createAuthRoutes(config) {
@@ -9,6 +10,10 @@ export function createAuthRoutes(config) {
     rateLimit({
       windowMs: 15 * 60 * 1000,
       limit,
+      // Express resolves the nearest untrusted hop using our CIDR policy. Never read a raw header.
+      // Canonical IPv6 subnet keys also prevent address-rotation bypass within a /56.
+      keyGenerator: (req) =>
+        ipKeyGenerator(isIP(req.ip) ? req.ip : req.socket.remoteAddress),
       standardHeaders: 'draft-8',
       legacyHeaders: false,
       message: {

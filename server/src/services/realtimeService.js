@@ -4,8 +4,16 @@ import mongoose from 'mongoose';
 import { User } from '../models/User.js';
 import { Notification } from '../models/Notification.js';
 import { cookieName, verifySession } from './sessionService.js';
-export async function dispatchNotifications(io) {
-  if (mongoose.connection.readyState !== 1) return 0;
+import { logger as defaultLogger } from '../utils/logger.js';
+import { runJob, JobFailure } from '../utils/jobRunner.js';
+export async function dispatchNotifications(
+  io,
+  { logger = defaultLogger, failOnError = false } = {},
+) {
+  if (mongoose.connection.readyState !== 1) {
+    if (failOnError) throw new Error('Database unavailable');
+    return 0;
+  }
   const pending = await Notification.find({ broadcastAt: null })
     .sort({ createdAt: 1 })
     .limit(100)
@@ -17,6 +25,7 @@ export async function dispatchNotifications(io) {
     users.get(key).push(row._id);
   }
   let sent = 0;
+  let failed = 0;
   for (const [id, ids] of users) {
     try {
       const current = await User.findById(id).select('+tokenVersion');
@@ -34,10 +43,13 @@ export async function dispatchNotifications(io) {
         { $set: { broadcastAt: new Date() } },
       );
       sent += ids.length;
-    } catch {
+    } catch (error) {
+      failed++;
+      logger.warn('job_item_failed', { job: 'notification_outbox', error });
       /* Retry pending outbox rows; delivery failures never touch business state. */
     }
   }
+  if (failed && failOnError) throw new JobFailure({ sent, failed });
   return sent;
 }
 export function attachRealtime(server, app, config, { poll = true } = {}) {
@@ -84,17 +96,23 @@ export function attachRealtime(server, app, config, { poll = true } = {}) {
     // No client-controlled join, room, recipient, or notification-write events exist.
   });
   app.set('io', io);
-  let running = false;
-  const tick = async () => {
-    if (running) return;
-    running = true;
-    try {
-      await dispatchNotifications(io);
-    } catch {
-      /* Database recovery will retry. */
-    } finally {
-      running = false;
-    }
+  let inFlight;
+  const logger = app.get('logger') || defaultLogger;
+  const tick = () => {
+    if (inFlight) return;
+    inFlight = runJob(
+      'notification_outbox',
+      async () => ({
+        sent: await dispatchNotifications(io, { logger, failOnError: true }),
+      }),
+      { logger },
+    )
+      .catch(() => {
+        /* Failure already logged; database recovery will retry. */
+      })
+      .finally(() => {
+        inFlight = null;
+      });
   };
   const timer = poll ? setInterval(tick, 2000) : null;
   timer?.unref();
@@ -102,6 +120,7 @@ export function attachRealtime(server, app, config, { poll = true } = {}) {
     io,
     close: async () => {
       if (timer) clearInterval(timer);
+      await inFlight;
       app.set('io', null);
       await new Promise((resolve) => io.close(resolve));
     },

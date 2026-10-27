@@ -4,6 +4,7 @@ import sharp from 'sharp';
 import { Donation } from '../models/Donation.js';
 import { ImageCleanupTask } from '../models/ImageCleanupTask.js';
 import { HttpError } from '../utils/HttpError.js';
+import { logger } from '../utils/logger.js';
 import {
   cloudinaryEnabled,
   imageLimits,
@@ -74,6 +75,7 @@ export async function cleanupImages(config, onlyPublicId) {
     .sort({ readyAfter: 1 })
     .limit(25);
   let removed = 0;
+  let failed = 0;
   for (const task of tasks) {
     try {
       if (!(await Donation.exists({ 'image.publicId': task.publicId }))) {
@@ -84,7 +86,9 @@ export async function cleanupImages(config, onlyPublicId) {
         _id: task._id,
         readyAfter: task.readyAfter,
       });
-    } catch {
+    } catch (error) {
+      failed++;
+      logger.warn('job_item_failed', { job: 'cleanup_images', error });
       await ImageCleanupTask.updateOne(
         { _id: task._id },
         {
@@ -94,7 +98,11 @@ export async function cleanupImages(config, onlyPublicId) {
       );
     }
   }
-  return { removed, pending: (await ImageCleanupTask.exists({})) !== null };
+  return {
+    removed,
+    failed,
+    pending: (await ImageCleanupTask.exists({})) !== null,
+  };
 }
 function revisionFilter(donation) {
   return !donation.imageVersion

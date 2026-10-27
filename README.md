@@ -221,3 +221,7 @@ Tests use real MongoDB transactions and image decoding with a mocked Cloudinary 
 ## Production-readiness audit
 
 See [the production-readiness report](docs/production-readiness-audit.md) for verified feature coverage, remaining release blockers, cookie/domain recommendations, job scheduling and exact build/start prerequisites. The audit does not deploy the application. Cloudinary provider setup and hosted authentication verification remain manual.
+
+## Milestone 6B: backend production hardening
+
+See [Milestone 6B hardening](docs/milestone-6b-hardening.md) for TRUSTED_PROXY_CIDRS configuration and Render verification, production JSON log redaction, scheduler exit codes and the remaining alerting gap. Direct local access keeps proxy trust disabled. Production Render web startup requires an operator-verified proxy allowlist; no Render addresses are guessed. Use `/api/health` for liveness and `/api/health/ready` for MongoDB/transaction-topology readiness. No actual alert destination has been verified and no deployment is performed.

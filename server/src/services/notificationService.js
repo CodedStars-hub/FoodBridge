@@ -1,4 +1,5 @@
 import { Notification } from '../models/Notification.js';
+import { logger } from '../utils/logger.js';
 export async function persistNotification(
   { recipient, eventKey, type, message, request, donation },
   session,
@@ -64,7 +65,8 @@ export function notificationView(doc) {
 export function emitInboxChange(io, recipient) {
   try {
     io?.to(`user:${recipient}`).emit('notifications:changed', {});
-  } catch {
+  } catch (error) {
+    logger.warn('notification_delivery_failed', { error });
     /* Durable inbox remains authoritative. */
   }
 }

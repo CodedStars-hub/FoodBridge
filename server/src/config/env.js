@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
+import { parseTrustedProxies } from './proxy.js';
 dotenv.config({
   path: fileURLToPath(new URL('../../.env', import.meta.url)),
   quiet: true,
@@ -44,6 +45,9 @@ const schema = z.object({
   COOKIE_SAME_SITE: z.enum(['lax', 'strict', 'none']).default('lax'),
   LOGIN_RATE_LIMIT: z.coerce.number().int().min(1).default(20),
   REGISTER_RATE_LIMIT: z.coerce.number().int().min(1).default(10),
+  TRUSTED_PROXY_CIDRS: z.string().default(''),
+  RENDER: z.enum(['true', 'false']).default('false'),
+  RENDER_SERVICE_TYPE: z.string().optional(),
   CLIENT_ORIGINS: z.string().optional(),
   GEO_DEFAULT_RADIUS_KM: z.coerce.number().positive().max(200).default(10),
   GEO_MAX_RADIUS_KM: z.coerce.number().positive().max(200).default(100),
@@ -72,6 +76,14 @@ export function parseEnvironment(source = process.env) {
     );
   }
   const config = result.data;
+  config.TRUSTED_PROXY_CIDRS = parseTrustedProxies(config.TRUSTED_PROXY_CIDRS);
+  if (
+    config.NODE_ENV === 'production' &&
+    config.RENDER === 'true' &&
+    (!config.RENDER_SERVICE_TYPE || config.RENDER_SERVICE_TYPE === 'web') &&
+    !config.TRUSTED_PROXY_CIDRS.length
+  )
+    throw new Error('Render web services require verified TRUSTED_PROXY_CIDRS');
   config.CLIENT_ORIGINS = (config.CLIENT_ORIGINS || config.CLIENT_ORIGIN)
     .split(',')
     .map((value) => value.trim());
