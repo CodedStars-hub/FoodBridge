@@ -10,13 +10,20 @@ import { runJob } from './utils/jobRunner.js';
 // Shared HTTP/Socket.IO runtime. Listening and process lifecycle belong to the host.
 export async function createRuntime(
   config,
-  { logger = createLogger({ environment: config.NODE_ENV }) } = {},
+  {
+    logger = createLogger({ environment: config.NODE_ENV }),
+    onStage = () => {},
+  } = {},
 ) {
-  const connected = await connectDatabase(config.MONGODB_URI);
+  onStage('database_connection');
+  const connected = await connectDatabase(config.MONGODB_URI, { onStage });
   logger.info(connected ? 'database_connected' : 'database_unconfigured');
+  onStage('application');
   const app = createApp(config, { logger });
   const server = createServer(app);
+  onStage('socket_io');
   const realtime = attachRealtime(server, app, config);
+  onStage('maintenance');
   let cleanupPromise;
   let cleanupTimer;
   if (cloudinaryEnabled(config)) {

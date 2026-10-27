@@ -1,5 +1,7 @@
+import { startupDiagnostics } from './startupDiagnostics.js';
 // Logging is allowlisted, not a serialization of requests or arbitrary Error objects.
-// This deliberately excludes headers, bodies, URLs/queries, identifiers and error messages/stacks.
+// Ordinary logs exclude request content and raw errors. Startup failures add only constructed
+// safe messages and known application stack locations, never arbitrary exception text.
 const events = new Set([
   'http_request',
   'http_error',
@@ -10,6 +12,7 @@ const events = new Set([
   'job_skipped',
   'readiness_failed',
   'server_started',
+  'startup_step',
   'demo_rate_limit_mode',
   'server_failed',
   'database_connected',
@@ -32,6 +35,9 @@ const errorNames = new Set([
   'MongoServerError',
   'MongoNetworkError',
   'MongoServerSelectionError',
+  'MongooseServerSelectionError',
+  'MongoParseError',
+  'MongoNetworkTimeoutError',
   'MongooseError',
   'ValidationError',
   'JobFailure',
@@ -41,6 +47,8 @@ const errorCodes = new Set([
   'ETIMEDOUT',
   'ENOTFOUND',
   'ECONNRESET',
+  'EADDRINUSE',
+  'EACCES',
   'JOB_PARTIAL_FAILURE',
   'DEPENDENCY_UNAVAILABLE',
 ]);
@@ -92,7 +100,24 @@ export function safeError(error) {
         : {}),
   };
 }
-function metadata(fields) {
+const startupStages = new Set([
+  'environment',
+  'database_connection',
+  'database_indexes',
+  'application',
+  'socket_io',
+  'maintenance',
+  'listen',
+  'shutdown',
+]);
+const startupModels = new Set([
+  'User',
+  'Donation',
+  'DonationRequest',
+  'Notification',
+  'ImageCleanupTask',
+]);
+function metadata(fields, event) {
   const result = {};
   for (const key of ['requestId', 'runId'])
     if (typeof fields[key] === 'string' && /^[a-f0-9-]{36}$/i.test(fields[key]))
@@ -120,7 +145,16 @@ function metadata(fields) {
       result[key] = fields[key];
   if (typeof fields.pending === 'boolean') result.pending = fields.pending;
   if (jobs.has(fields.job)) result.job = fields.job;
-  if (fields.error) result.error = safeError(fields.error);
+  if (['startup_step', 'server_failed', 'shutdown_failed'].includes(event)) {
+    if (startupStages.has(fields.stage)) result.stage = fields.stage;
+    if (startupModels.has(fields.error?.startupModel))
+      result.model = fields.error.startupModel;
+  }
+  if (fields.error) {
+    result.error = safeError(fields.error);
+    if (['server_failed', 'shutdown_failed'].includes(event))
+      Object.assign(result.error, startupDiagnostics(fields.error));
+  }
   return result;
 }
 export function createLogger({ environment, write } = {}) {
@@ -132,12 +166,12 @@ export function createLogger({ environment, write } = {}) {
       timestamp: new Date().toISOString(),
       level,
       event,
-      ...metadata(fields),
+      ...metadata(fields, event),
     };
     const line =
       mode === 'production'
         ? JSON.stringify(record)
-        : `${record.timestamp} ${level.toUpperCase()} ${event} ${JSON.stringify(metadata(fields))}`;
+        : `${record.timestamp} ${level.toUpperCase()} ${event} ${JSON.stringify(metadata(fields, event))}`;
     try {
       if (write) write(line, level);
       else if (level === 'error' || level === 'warn') console.error(line);

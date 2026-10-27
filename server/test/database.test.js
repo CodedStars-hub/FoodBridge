@@ -56,9 +56,10 @@ describe('bounded database connection reuse', () => {
     vi.mocked(mongoose.connect).mockRejectedValueOnce(
       new Error('isolated connection failure'),
     );
-    await expect(connectDatabase(uri)).rejects.toThrow(
-      'isolated connection failure',
-    );
+    await expect(connectDatabase(uri)).rejects.toMatchObject({
+      message: 'isolated connection failure',
+      startupStage: 'database_connection',
+    });
     expect(await connectDatabase(uri)).toBe(true);
     expect(mongoose.connect).toHaveBeenCalledTimes(2);
   });
@@ -66,9 +67,11 @@ describe('bounded database connection reuse', () => {
     vi.mocked(User.init).mockRejectedValueOnce(
       new Error('isolated initialization failure'),
     );
-    await expect(connectDatabase(uri)).rejects.toThrow(
-      'isolated initialization failure',
-    );
+    await expect(connectDatabase(uri)).rejects.toMatchObject({
+      message: 'isolated initialization failure',
+      startupStage: 'database_indexes',
+      startupModel: 'User',
+    });
     expect(await connectDatabase(uri)).toBe(true);
     await expect(
       connectDatabase('mongodb://127.0.0.1:1/another-fixture'),

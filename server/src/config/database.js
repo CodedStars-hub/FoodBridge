@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { tagStartupFailure } from '../utils/startupDiagnostics.js';
 import { Notification } from '../models/Notification.js';
 import { ImageCleanupTask } from '../models/ImageCleanupTask.js';
 import { Donation } from '../models/Donation.js';
@@ -15,7 +16,7 @@ const poolOptions = {
   maxIdleTimeMS: 60000,
   waitQueueTimeoutMS: 5000,
 };
-export async function connectDatabase(uri) {
+export async function connectDatabase(uri, { onStage = () => {} } = {}) {
   if (!uri) return false;
   if (connectionUri && connectionUri !== uri)
     throw new Error(
@@ -24,13 +25,22 @@ export async function connectDatabase(uri) {
   if (connectionPromise) return connectionPromise;
   connectionUri = uri;
   connectionPromise = (async () => {
-    await mongoose.connect(uri, poolOptions);
+    try {
+      await mongoose.connect(uri, poolOptions);
+    } catch (error) {
+      throw tagStartupFailure(error, 'database_connection');
+    }
+    onStage('database_indexes');
     await Promise.all([
-      User.init(),
-      Donation.init(),
-      DonationRequest.init(),
-      Notification.init(),
-      ImageCleanupTask.init(),
+      ...[User, Donation, DonationRequest, Notification, ImageCleanupTask].map(
+        async (model) => {
+          try {
+            await model.init();
+          } catch (error) {
+            throw tagStartupFailure(error, 'database_indexes', model.modelName);
+          }
+        },
+      ),
     ]);
     return true;
   })();

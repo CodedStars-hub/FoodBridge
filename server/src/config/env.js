@@ -108,19 +108,21 @@ export function parseEnvironment(source = process.env) {
   config.TRUSTED_PROXY_CIDRS = parseTrustedProxies(config.TRUSTED_PROXY_CIDRS);
   if (config.CLIENT_IP_SOURCE === 'socket' && config.TRUSTED_PROXY_CIDRS.length)
     throw new Error('Socket-only client handling must not trust proxy CIDRs');
-  if (
-    config.RATE_LIMIT_STORE === 'process-demo' &&
-    (config.NODE_ENV !== 'production' ||
-      config.RENDER !== 'true' ||
-      config.VERCEL === '1' ||
-      config.DEMO_SINGLE_PROCESS !== 'true' ||
-      config.CLIENT_IP_SOURCE !== 'socket' ||
-      config.UPSTASH_REDIS_REST_URL ||
-      config.UPSTASH_REDIS_REST_TOKEN)
-  )
-    throw new Error(
-      'process-demo requires a single production Render process, socket-only identity, and no Redis credentials',
-    );
+  if (config.RATE_LIMIT_STORE === 'process-demo') {
+    const conflicts = [
+      ...(config.NODE_ENV !== 'production' ? ['NODE_ENV'] : []),
+      ...(config.RENDER !== 'true' ? ['RENDER'] : []),
+      ...(config.VERCEL === '1' ? ['VERCEL'] : []),
+      ...(config.DEMO_SINGLE_PROCESS !== 'true' ? ['DEMO_SINGLE_PROCESS'] : []),
+      ...(config.CLIENT_IP_SOURCE !== 'socket' ? ['CLIENT_IP_SOURCE'] : []),
+      ...(config.UPSTASH_REDIS_REST_URL ? ['UPSTASH_REDIS_REST_URL'] : []),
+      ...(config.UPSTASH_REDIS_REST_TOKEN ? ['UPSTASH_REDIS_REST_TOKEN'] : []),
+    ];
+    if (conflicts.length)
+      throw new Error(
+        `Invalid environment configuration: ${conflicts.join(', ')}`,
+      );
+  }
   if (
     config.CLIENT_IP_SOURCE === 'vercel' &&
     (config.NODE_ENV !== 'production' ||
