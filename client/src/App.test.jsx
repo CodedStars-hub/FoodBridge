@@ -537,3 +537,48 @@ describe('editorial authentication experience', () => {
     await screen.findByRole('form', { name: 'Login' });
   });
 });
+
+describe('public authentication session restoration', () => {
+  it.each(['/register', '/login'])(
+    'renders %s when a missing or expired session returns HTTP 401',
+    async (path) => {
+      fetch.mockResolvedValueOnce(
+        reply({ error: { message: 'Authentication required' } }, 401),
+      );
+      renderPage(path);
+      expect(
+        await screen.findByRole('form', {
+          name: path === '/register' ? 'Registration' : 'Login',
+        }),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/couldn’t restore/)).not.toBeInTheDocument();
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/auth/me',
+        expect.objectContaining({ credentials: 'include', method: 'GET' }),
+      );
+    },
+  );
+  it.each(['/register', '/login'])(
+    'keeps an actual backend outage distinct from anonymous access on %s and recovers on retry',
+    async (path) => {
+      fetch.mockResolvedValueOnce(
+        reply({ error: { message: 'Service unavailable' } }, 503),
+      );
+      renderPage(path);
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'couldn’t restore your session',
+      );
+      expect(screen.queryByRole('form')).not.toBeInTheDocument();
+      fetch.mockResolvedValueOnce(
+        reply({ error: { message: 'Authentication required' } }, 401),
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+      expect(
+        await screen.findByRole('form', {
+          name: path === '/register' ? 'Registration' : 'Login',
+        }),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    },
+  );
+});

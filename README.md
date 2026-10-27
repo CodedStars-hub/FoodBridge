@@ -25,6 +25,17 @@ npm run dev
 
 Open http://localhost:5173; the API runs on http://localhost:5001. Vite proxies `/api` and `/socket.io` (including WebSockets) to the API. Press Ctrl+C to stop both. Register as a donor, NGO (organization name required), or volunteer. Registration signs you in and takes you to your role’s dashboard. Reloading restores your session. The profile form persists safe field changes; logout ends all your sessions.
 
+If login or registration says “We couldn’t restore your session,” check that both development servers are running. Starting only `npm run dev:client` serves the UI but leaves `/api/auth/me` dependent on the backend at port 5001. Start `npm run dev:server` in another terminal, or use `npm run dev` from the root to start both. After the backend reports `database_connected` and `server_started`, choose **Try again** or refresh. Do not change cookie, CORS or CSRF settings to resolve a missing backend.
+
+To distinguish an unavailable backend from a missing session:
+
+```sh
+curl -i http://localhost:5173/api/auth/me
+curl -i http://localhost:5001/api/health/ready
+```
+
+Without a session cookie, the first request should return HTTP 401 with “Authentication required”; login and registration then render normally. A ready database-backed API returns HTTP 200 from the second request. A refused connection or proxy HTTP 500 indicates a server/startup problem; inspect the backend terminal for its startup result.
+
 Leaving `MONGODB_URI` empty allows the API and landing page to run without database features; account endpoints return HTTP 503. A configured but unreachable database causes startup to fail. Environment validation, including a valid JWT secret, always runs. Health never queries MongoDB.
 
 ```sh
