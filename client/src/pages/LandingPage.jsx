@@ -2,274 +2,409 @@ import { Link } from 'react-router-dom';
 import {
   ArrowRight,
   ArrowUpRight,
-  Check,
-  Heart,
-  Leaf,
-  Sprout,
-  Utensils,
-  Building2,
+  MapPin,
+  Route,
+  History,
   HandHeart,
-  PackageCheck,
+  Utensils,
+  Sprout,
+  Check,
+  MoveUpRight,
 } from 'lucide-react';
+import {
+  FoodPhoto,
+  PublicButton,
+  SectionLabel,
+} from '../components/PublicSite.jsx';
 const steps = [
   {
-    icon: Utensils,
     number: '01',
-    title: 'Share what’s spare',
-    text: 'Cafeterias and restaurants will be able to list fresh surplus food, with the details that matter.',
+    icon: Utensils,
+    title: 'Share available food.',
+    text: 'List your surplus, quantity and pickup window. Add the storage, handling and allergen details an organization needs to know.',
+  },
+  {
+    number: '02',
+    icon: HandHeart,
+    title: 'Find a community connection.',
+    text: 'Eligible, verified NGOs can request what they can use. Donors review requests and reserve the agreed quantity.',
+  },
+  {
+    number: '03',
+    icon: Route,
+    title: 'Pass it on, with care.',
+    text: 'Coordinate direct collection or a volunteer pickup. The donor confirms handover; the receiving NGO confirms receipt.',
+  },
+];
+const features = [
+  {
+    icon: MapPin,
+    title: 'Closer connections',
+    text: 'Location-based discovery helps organizations find available food nearby.',
   },
   {
     icon: HandHeart,
-    number: '02',
-    title: 'Connect with care',
-    text: 'Local NGOs will be able to discover available food and coordinate a collection.',
+    title: 'Thoughtful coordination',
+    text: 'Clear requests and reservations keep donors and organizations on the same page.',
   },
   {
-    icon: PackageCheck,
-    number: '03',
-    title: 'Make good go further',
-    text: 'Food reaches people through community partners, giving every rescued meal a greater purpose.',
+    icon: Route,
+    title: 'A shared way forward',
+    text: 'Follow volunteer pickup progress, from assignment to confirmed delivery.',
+  },
+  {
+    icon: History,
+    title: 'A story you can follow',
+    text: 'Donation history records handovers and receipts, so everyone can see their own activity.',
   },
 ];
-function FoodIllustration() {
+function Branch({ className = '' }) {
   return (
-    <div
-      className="food-scene"
-      role="img"
-      aria-label="Illustration of a bowl of fresh vegetables with tomatoes, carrots, and leafy greens"
+    <svg
+      className={className}
+      viewBox="0 0 120 150"
+      fill="none"
+      aria-hidden="true"
     >
-      <div className="scene-grid" />
-      <span className="scene-label">
-        <span /> FRESH FOOD. NEW POSSIBILITIES.
-      </span>
-      <div className="orbit orbit-one" />
-      <div className="orbit orbit-two" />
-      <div className="produce-leaf leaf-one" />
-      <div className="produce-leaf leaf-two" />
-      <div className="produce-leaf leaf-three" />
-      <div className="carrot carrot-one" />
-      <div className="carrot carrot-two" />
-      <div className="bowl">
-        <div className="bowl-rim">
-          <div className="salad-leaf salad-one" />
-          <div className="salad-leaf salad-two" />
-          <div className="salad-leaf salad-three" />
-          <div className="tomato tomato-one" />
-          <div className="tomato tomato-two" />
-          <div className="cucumber cucumber-one" />
-          <div className="cucumber cucumber-two" />
-        </div>
-        <span className="bowl-mark">
-          <Sprout size={31} /> foodbridge
-        </span>
-      </div>
-      <div className="floating-card rescue-card">
-        <span className="mini-icon">
-          <Check size={18} />
-        </span>
-        <div>
-          <strong>A little surplus.</strong>
-          <span>A whole lot of good.</span>
-        </div>
-      </div>
-      <div className="floating-card heart-card">
-        <Heart size={19} fill="currentColor" />
-        <span>Made for our communities</span>
-      </div>
-      <div className="scene-note">
-        Too good to waste.
-        <svg width="63" height="32" viewBox="0 0 63 32" aria-hidden="true">
-          <path
-            d="M2 4Q30 34 56 13M47 12l11-2-3 12"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.6"
-          />
-        </svg>
-      </div>
-    </div>
+      <path
+        d="M61 143C60 102 70 61 91 13M66 102C34 99 20 77 16 55C42 55 61 69 66 102ZM74 70C82 44 101 40 116 42C115 61 100 78 74 70ZM82 42C55 41 44 24 42 8C62 7 82 21 82 42"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 export default function LandingPage() {
   return (
     <>
-      <section className="hero container" aria-labelledby="hero-heading">
-        <div className="hero-copy">
-          <span className="eyebrow">
-            <span className="status-dot" /> SMALL ACTIONS. MEANINGFUL CHANGE.
-          </span>
-          <h1 id="hero-heading">
-            Good food.
-            <br />
-            Greater{' '}
-            <span className="accent-word">
-              purpose.
-              <svg viewBox="0 0 320 15" aria-hidden="true">
-                <path d="M3 10Q147-2 314 8" />
-              </svg>
-            </span>
-          </h1>
-          <p className="hero-description">
-            Bridge the gap between surplus and need. Help turn extra food into
-            an opportunity to nourish your community.
+      <section
+        className="public-hero public-container"
+        aria-labelledby="hero-heading"
+      >
+        <div className="public-hero-copy">
+          <p className="public-kicker">
+            <span />
+            Good things belong together.
           </p>
-          <div className="hero-actions">
-            <Link className="button" to="/register?role=donor">
-              I want to donate food <ArrowUpRight size={18} />
-            </Link>
-            <Link className="button button-outline" to="/register?role=ngo">
-              I’m an NGO <ArrowRight size={18} />
+          <h1 id="hero-heading">
+            Good food
+            <br />
+            deserves a<br />
+            <em>second story.</em>
+          </h1>
+          <p className="public-hero-description">
+            FoodBridge connects surplus food with communities that can put it to
+            good use. Less waste, more shared possibility.
+          </p>
+          <div className="public-hero-actions">
+            <PublicButton to="/register?role=donor">
+              Share surplus food
+            </PublicButton>
+            <Link className="public-text-link" to="/register?role=ngo">
+              Find food for your community{' '}
+              <ArrowRight size={18} aria-hidden="true" />
             </Link>
           </div>
-          <div className="hero-footnote">
-            <span className="tiny-leaf">
-              <Leaf size={16} />
+          <p className="public-hero-note">
+            <Sprout size={17} aria-hidden="true" /> A small step. A shared
+            table.
+          </p>
+        </div>
+        <div className="public-hero-art">
+          <div className="public-photo-frame">
+            <FoodPhoto
+              name="harvest"
+              alt="Hands arranging cabbage, tomatoes and citrus in a woven harvest basket"
+              eager
+            />
+          </div>
+          <Branch className="public-hero-branch" />
+          <div className="public-story-seal" aria-hidden="true">
+            <Sprout size={28} strokeWidth={1.3} />
+            <span>
+              Too good
+              <br />
+              <em>to go to waste.</em>
             </span>
-            <span>For a world where good food goes further.</span>
+          </div>
+          <div className="public-photo-caption">
+            <span>Fresh possibilities, shared.</span>
+            <span>
+              Food is just the beginning. <MoveUpRight size={15} />
+            </span>
           </div>
         </div>
-        <FoodIllustration />
       </section>
-      <section className="partners-strip" aria-label="Our community">
-        <div className="container partner-inner">
-          <p>
-            One shared table.
+      <div className="public-community-strip">
+        <div className="public-container">
+          <p>A place at the table for</p>
+          <span>
+            <Utensils size={18} />
+            Cafeterias & restaurants
+          </span>
+          <span>
+            <HandHeart size={19} />
+            Community organizations
+          </span>
+          <span>
+            <Sprout size={19} />
+            People who care
+          </span>
+        </div>
+      </div>
+      <section
+        className="public-problem public-container public-section"
+        id="the-idea"
+        aria-labelledby="idea-heading"
+      >
+        <SectionLabel number="01">A better connection</SectionLabel>
+        <div className="public-problem-heading">
+          <h2 id="idea-heading">
+            The food is there.
             <br />
-            <strong>A whole community.</strong>
-          </p>
-          <span>
-            <Building2 /> College cafeterias
-          </span>
-          <span>
-            <Utensils /> Restaurants & cafés
-          </span>
-          <span>
-            <HandHeart /> NGOs & communities
-          </span>
+            <em>So is the possibility.</em>
+          </h2>
+          <div>
+            <p>
+              At the end of a service, good food can be left without a next
+              step. Nearby, community organizations are working to bring people
+              to the table.
+            </p>
+            <p>
+              FoodBridge creates a practical connection between the two. A place
+              to share what’s available, find what’s needed, and work out what
+              happens next.
+            </p>
+          </div>
+        </div>
+        <div className="public-story-grid">
+          <figure className="public-story-photo">
+            <FoodPhoto
+              name="basket"
+              alt="A person carefully placing fresh garden vegetables into a wicker basket"
+            />
+            <figcaption>
+              Something worth sharing. Someone ready to make use of it.
+            </figcaption>
+          </figure>
+          <div className="public-story-note">
+            <span className="public-handwritten">
+              A different kind of
+              <br />
+              food story.
+            </span>
+            <Branch />
+            <p>
+              Not every good thing
+              <br />
+              needs to be new.
+              <br />
+              <strong>
+                Sometimes, it just needs
+                <br />a new connection.
+              </strong>
+            </p>
+            <a className="public-text-link" href="#how-it-works">
+              See how it comes together <ArrowRight size={18} />
+            </a>
+          </div>
         </div>
       </section>
       <section
-        className="section container"
+        className="public-how public-section"
         id="how-it-works"
         aria-labelledby="how-heading"
       >
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">A SIMPLE IDEA. A SHARED PURPOSE.</span>
-            <h2 id="how-heading">From extra to extraordinary.</h2>
+        <div className="public-container">
+          <div className="public-section-heading">
+            <div>
+              <SectionLabel number="02">
+                Simple steps, shared purpose
+              </SectionLabel>
+              <h2 id="how-heading">
+                From surplus
+                <br />
+                to <em>someone’s next meal.</em>
+              </h2>
+            </div>
+            <p>
+              A little coordination can open
+              <br />a whole new chapter.
+            </p>
           </div>
-          <p>
-            A simpler path for good food to find
-            <br className="desktop-break" /> the people who need it.
+          <ol className="public-steps">
+            {steps.map(({ number, icon: Icon, title, text }) => (
+              <li key={number}>
+                <div className="public-step-top">
+                  <span>{number}</span>
+                  <Icon size={32} strokeWidth={1.3} aria-hidden="true" />
+                </div>
+                <h3>{title}</h3>
+                <p>{text}</p>
+              </li>
+            ))}
+          </ol>
+          <p className="public-safety-note">
+            <Check size={15} aria-hidden="true" /> Food details are donor
+            declarations. Pickup windows and platform matching do not certify
+            food safety.
           </p>
         </div>
-        <div className="steps-grid">
-          {steps.map(({ icon: Icon, number, title, text }) => (
-            <article className="step-card" key={number}>
-              <div className="step-top">
-                <span className="step-icon">
-                  <Icon size={25} strokeWidth={1.6} />
-                </span>
-                <span className="step-number">{number}</span>
-              </div>
-              <h3>{title}</h3>
-              <p>{text}</p>
-            </article>
-          ))}
-        </div>
-        <p className="foundation-note">
-          We’re laying the foundation. Food listing and collection features are
-          coming in future milestones.
-        </p>
       </section>
       <section
-        className="impact-section"
-        id="our-impact"
-        aria-labelledby="impact-heading"
+        className="public-community public-section public-container"
+        id="community"
+        aria-labelledby="community-heading"
       >
-        <div className="container impact-grid">
-          <div className="impact-art" aria-hidden="true">
-            <div className="impact-circle">
-              <Sprout size={100} strokeWidth={1.1} />
-              <span>
-                Every meal
-                <br />
-                <strong>matters.</strong>
-              </span>
+        <SectionLabel number="03">Built around people</SectionLabel>
+        <div className="public-section-heading">
+          <h2 id="community-heading">
+            Different roles.
+            <br />
+            <em>One shared table.</em>
+          </h2>
+          <p>
+            Good food goes further
+            <br />
+            when we move together.
+          </p>
+        </div>
+        <div className="public-role-grid">
+          <article className="public-role public-role-donor">
+            <div className="public-role-illustration" aria-hidden="true">
+              <Utensils size={74} strokeWidth={1} />
+              <span className="public-role-orbit" />
+              <Sprout size={45} strokeWidth={1.1} />
             </div>
-            <span className="impact-spark spark-one">✳</span>
-            <span className="impact-spark spark-two">✳</span>
-            <span className="impact-caption">Better together, by nature.</span>
-          </div>
-          <div className="impact-copy">
-            <span className="eyebrow">MORE THAN A MEAL</span>
-            <h2>
-              Less food wasted.
+            <span className="public-role-label">For food donors</span>
+            <h3>
+              A little surplus.
+              <br />A lot of possibility.
+            </h3>
+            <p>
+              Give extra food a next step. Share from your cafeteria, restaurant
+              or kitchen.
+            </p>
+            <Link to="/register?role=donor">
+              Become a food donor <ArrowUpRight size={20} />
+            </Link>
+          </article>
+          <article className="public-role public-role-ngo">
+            <FoodPhoto
+              name="shared-table"
+              alt="A colorful spread of vegetable dishes and greens ready for a shared meal"
+              sizes="(max-width: 760px) 90vw, 30vw"
+            />
+            <div className="public-role-content">
+              <span className="public-role-label">
+                For NGOs & organizations
+              </span>
+              <h3>
+                More connection.
+                <br />
+                More possibility.
+              </h3>
+              <p>
+                Discover available food and coordinate collections for your
+                community.
+              </p>
+              <Link to="/register?role=ngo">
+                Join as an organization <ArrowUpRight size={20} />
+              </Link>
+            </div>
+          </article>
+          <article className="public-role public-role-volunteer">
+            <div className="public-volunteer-art" aria-hidden="true">
+              <span />
+              <Route size={83} strokeWidth={1} />
+              <span />
+            </div>
+            <span className="public-role-label">For volunteers</span>
+            <h3>
+              Be the hands
               <br />
-              More good created.
+              that help it happen.
+            </h3>
+            <p>
+              Help connect the dots. Take on a pickup and move good food
+              forward.
+            </p>
+            <Link to="/register?role=volunteer">
+              Lend a hand <ArrowUpRight size={20} />
+            </Link>
+          </article>
+        </div>
+      </section>
+      <section
+        className="public-why public-section"
+        id="why-foodbridge"
+        aria-labelledby="why-heading"
+      >
+        <div className="public-container public-why-grid">
+          <div>
+            <SectionLabel number="04">Why FoodBridge</SectionLabel>
+            <h2 id="why-heading">
+              Good intentions.
+              <br />
+              <em>
+                A practical way
+                <br />
+                to follow through.
+              </em>
             </h2>
             <p>
-              Surplus food is still full of possibility. Connecting food donors
-              with NGOs can support communities and keep valuable resources out
-              of the bin.
+              From finding a nearby listing to confirming a receipt, the details
+              belong in one place.
             </p>
-            <ul className="impact-list">
-              <li>
-                <span>
-                  <Leaf size={18} />
-                </span>
+            <div className="public-why-symbol" aria-hidden="true">
+              <Sprout size={76} strokeWidth={1} />
+              <span>
+                Less friction.
+                <br />
+                More connection.
+              </span>
+            </div>
+          </div>
+          <div className="public-features">
+            {features.map(({ icon: Icon, title, text }) => (
+              <article key={title}>
+                <Icon size={25} strokeWidth={1.3} aria-hidden="true" />
                 <div>
-                  <strong>A lighter footprint</strong>
-                  <p>
-                    Make better use of the food and resources we already have.
-                  </p>
+                  <h3>{title}</h3>
+                  <p>{text}</p>
                 </div>
-              </li>
-              <li>
-                <span>
-                  <Heart size={18} />
-                </span>
-                <div>
-                  <strong>A stronger community</strong>
-                  <p>
-                    Bring local businesses and community organisations closer.
-                  </p>
-                </div>
-              </li>
-            </ul>
-            <Link className="text-link" to="/register">
-              Be part of something good <ArrowRight size={17} />
-            </Link>
+              </article>
+            ))}
           </div>
         </div>
       </section>
-      <section className="container cta-section">
-        <div className="cta-card">
-          <span className="eyebrow">THERE’S A PLACE FOR YOU HERE</span>
-          <h2>
-            Let’s make good food
+      <section
+        className="public-final public-container"
+        aria-labelledby="final-heading"
+      >
+        <div className="public-final-inner">
+          <SectionLabel>The next chapter starts with you</SectionLabel>
+          <h2 id="final-heading">
+            Something good
             <br />
-            go a little further.
+            is worth <em>passing on.</em>
           </h2>
           <p>
-            Have food to share? Have a community to serve?
+            Have food to share? A community to support?
             <br />
-            Your next step can make a difference.
+            There’s a place for you here.
           </p>
-          <div className="hero-actions">
-            <Link className="button button-light" to="/register?role=donor">
-              Join as a food donor <ArrowUpRight size={18} />
-            </Link>
-            <Link className="button button-ghost" to="/register?role=ngo">
-              Join as an NGO <ArrowRight size={18} />
-            </Link>
+          <div className="public-final-actions">
+            <PublicButton to="/register?role=donor">
+              Share surplus food
+            </PublicButton>
+            <PublicButton variant="outline" to="/register?role=ngo">
+              Join as an NGO
+            </PublicButton>
           </div>
-          <Leaf
-            className="cta-leaf"
-            size={220}
-            strokeWidth={0.7}
-            aria-hidden="true"
-          />
+          <Branch className="public-final-branch" />
         </div>
       </section>
     </>

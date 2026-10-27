@@ -1,3 +1,5 @@
+import AuthShell from './AuthShell.jsx';
+import PublicSite from './PublicSite.jsx';
 import { useState } from 'react';
 import { useAuth } from '../auth/useAuth.js';
 import { dashboardPath } from '../auth/AuthContext.js';
@@ -18,6 +20,18 @@ export default function Layout() {
   const { user } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const { pathname } = useLocation();
+  if (pathname === '/login' || pathname === '/register')
+    return (
+      <AuthShell>
+        <Outlet />
+      </AuthShell>
+    );
+  if (pathname === '/')
+    return (
+      <PublicSite>
+        <Outlet />
+      </PublicSite>
+    );
   return (
     <>
       <a href="#main" className="skip-link">

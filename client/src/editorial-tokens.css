@@ -1,0 +1,42 @@
+@font-face {
+  font-family: 'FoodBridge Sans';
+  src: url('/fonts/dm-sans.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'FoodBridge Editorial';
+  src: url('/fonts/fraunces.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+}
+/* Shared editorial tokens, scoped to public, auth and workspace boundaries. */
+@font-face {
+  font-family: 'FoodBridge Editorial';
+  src: url('/fonts/fraunces-italic.woff2') format('woff2');
+  font-style: italic;
+  font-weight: 400 600;
+  font-display: swap;
+}
+.public-site,
+.auth-experience,
+.workspace-shell {
+  --public-ivory: #f7f4ec;
+  --public-forest: #233d2d;
+  --public-sage: #899a6d;
+  --public-terracotta: #c8734e;
+  --public-sand: #e9dfcc;
+  --public-charcoal: #282d25;
+  --public-muted: #636859;
+  --public-border: #d9dacb;
+  --public-accent-text: #a64f2d;
+  --public-serif: 'FoodBridge Editorial', Georgia, serif;
+  --public-sans: 'FoodBridge Sans', system-ui, sans-serif;
+  --public-radius: 6px;
+  --public-space: clamp(72px, 8vw, 120px);
+  background: var(--public-ivory);
+  color: var(--public-charcoal);
+  font: 400 16px/1.65 var(--public-sans);
+}

@@ -28,7 +28,7 @@ const actionDescriptions = {
   receive:
     'Confirm your organization received this food. This completes the reservation and permanently records the donated quantity.',
 };
-function RequestCard({ request, refresh, history }) {
+function RequestCard({ request, refresh, history, onSuccess }) {
   const { user } = useAuth();
   const donation = request.donation;
   const actions =
@@ -50,6 +50,9 @@ function RequestCard({ request, refresh, history }) {
       body: { action },
     });
     refresh();
+    onSuccess?.(
+      `${actionLabels[action]} completed. The latest inventory and request state have been requested.`,
+    );
   }
   return (
     <article className="request-card">
@@ -121,6 +124,34 @@ function RequestCard({ request, refresh, history }) {
       {request.resolutionReason && (
         <p className="field-hint">{request.resolutionReason}</p>
       )}
+      {user.role === 'donor' && history && (
+        <ol
+          className="donor-reservation-timeline"
+          aria-label="Reservation timeline"
+        >
+          {[
+            [request.createdAt, 'Requested'],
+            [request.acceptedAt, 'Accepted'],
+            [request.handedOverAt, 'Handed over'],
+            [request.receivedAt, 'Receipt confirmed'],
+            ...(!request.receivedAt
+              ? [
+                  [
+                    request.updatedAt,
+                    `Last updated: ${readable(request.status)}`,
+                  ],
+                ]
+              : []),
+          ]
+            .filter(([date]) => date)
+            .map(([date, label]) => (
+              <li key={label}>
+                {label}
+                <time dateTime={date}>{formatTime(date)}</time>
+              </li>
+            ))}
+        </ol>
+      )}
       <div className="hero-actions">
         {!history &&
           actions.map((action) => (
@@ -129,6 +160,11 @@ function RequestCard({ request, refresh, history }) {
               label={actionLabels[action]}
               description={actionDescriptions[action]}
               onConfirm={() => transition(action)}
+              className={
+                user.role === 'donor' && ['accept', 'handover'].includes(action)
+                  ? 'button'
+                  : 'button button-outline'
+              }
               disabled={expired && ['accept', 'handover'].includes(action)}
             />
           ))}
@@ -139,6 +175,7 @@ function RequestCard({ request, refresh, history }) {
 export default function RequestsPage({ history = false }) {
   const { user } = useAuth();
   const [status, setStatus] = useState('');
+  const [notice, setNotice] = useState('');
   const [page, setPage] = useState(1);
   const query = new URLSearchParams({ page, ...(status ? { status } : {}) });
   const result = useApiData(`/requests${history ? '/history' : ''}?${query}`);
@@ -163,6 +200,11 @@ export default function RequestsPage({ history = false }) {
           </p>
         </div>
       </div>
+      {user.role === 'donor' && notice && (
+        <p role="status" className="donor-feedback">
+          {notice}
+        </p>
+      )}
       <div className="donation-filters">
         <label>
           Request status
@@ -197,6 +239,44 @@ export default function RequestsPage({ history = false }) {
         {...result}
         retry={result.refresh}
         empty={result.data?.items.length === 0}
+        emptyContent={
+          user.role === 'donor' ? (
+            <div className="workspace-state empty-state">
+              <h2>
+                {status
+                  ? 'No requests with this status.'
+                  : history
+                    ? 'Your shared history starts here.'
+                    : 'Ready for your next connection.'}
+              </h2>
+              <p>
+                {status
+                  ? 'Choose another status to see more requests.'
+                  : history
+                    ? 'Closed requests will appear here with their recorded timeline.'
+                    : 'Incoming NGO requests will appear here when an organization responds to your food listing.'}
+              </p>
+              {status ? (
+                <button
+                  className="button button-outline"
+                  onClick={() => {
+                    setStatus('');
+                    setPage(1);
+                  }}
+                >
+                  Show all statuses
+                </button>
+              ) : (
+                <Link
+                  className="button button-outline"
+                  to="/dashboard/donor/donations"
+                >
+                  View my donations
+                </Link>
+              )}
+            </div>
+          ) : undefined
+        }
       >
         <div className="requests-list">
           {result.data?.items.map((request) => (
@@ -205,6 +285,7 @@ export default function RequestsPage({ history = false }) {
               request={request}
               refresh={result.refresh}
               history={history}
+              onSuccess={user.role === 'donor' ? setNotice : undefined}
             />
           ))}
         </div>

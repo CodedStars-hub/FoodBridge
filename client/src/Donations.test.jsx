@@ -64,6 +64,12 @@ const response = (data, status = 200) => ({
 });
 let dialogDescriptor;
 beforeAll(() => {
+  Object.defineProperty(HTMLDialogElement.prototype, 'close', {
+    configurable: true,
+    value() {
+      this.open = false;
+    },
+  });
   dialogDescriptor = Object.getOwnPropertyDescriptor(
     HTMLDialogElement.prototype,
     'showModal',
@@ -302,5 +308,175 @@ describe('real-data donation workspace UI', () => {
     expect(body.preparationTime).toMatch(/Z$/);
     expect(body.pickupDeadline).toMatch(/Z$/);
     expect(body).not.toHaveProperty('donor');
+  });
+});
+
+describe('Phase 3 donor workspace', () => {
+  it('shows genuine overview counts, monthly activity and recent records', async () => {
+    mount('/dashboard/donor', donor, (url) => {
+      if (url.includes('/analytics/donor'))
+        return response({
+          summary: {
+            totalDonations: 7,
+            activeDonations: 3,
+            completedDonations: 2,
+          },
+          monthly: [{ month: '2026-10', donations: 7 }],
+          range: { from: '2026-01-01', to: '2026-12-31' },
+        });
+      if (url.includes('/donations/mine'))
+        return response({ items: [donation], pagination });
+      return response({ items: [], pagination: { total: 4 } });
+    });
+    await screen.findByRole('img', { name: /Donations created by month/ });
+    const metrics = document.querySelector('.donor-metrics');
+    expect(within(metrics).getByText('3')).toBeInTheDocument();
+    expect(within(metrics).getByText('4')).toBeInTheDocument();
+    expect(within(metrics).getByText('2')).toBeInTheDocument();
+    expect(
+      await screen.findByRole('link', { name: donation.title }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('table', { hidden: true })).toHaveTextContent(
+      '2026-10',
+    );
+  });
+  it('gives new donors useful onboarding with actual zero counts', async () => {
+    mount('/dashboard/donor', donor, (url) =>
+      response(
+        url.includes('/analytics/')
+          ? {
+              summary: {
+                totalDonations: 0,
+                activeDonations: 0,
+                completedDonations: 0,
+              },
+              monthly: [],
+            }
+          : { items: [], pagination: { total: 0 } },
+      ),
+    );
+    expect(
+      await screen.findByRole('link', { name: 'Create your first donation' }),
+    ).toHaveAttribute('href', '/dashboard/donor/donations/new');
+    expect(
+      screen.getByText('Your next chapter starts here.'),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('img', { name: /Donations created/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(document.querySelector('.donor-metrics')).getAllByText('0'),
+    ).toHaveLength(4);
+  });
+  it('retains parent navigation for detail pages and opens the profile menu', async () => {
+    mount('/dashboard/donor/donations/listing-one', donor, () =>
+      response({ donation }),
+    );
+    await screen.findByRole('heading', { name: donation.title });
+    const navigation = screen.getByRole('navigation', {
+      name: 'Dashboard navigation',
+    });
+    expect(
+      within(navigation).getByRole('link', { name: 'My donations' }),
+    ).toHaveClass('active');
+    fireEvent.click(screen.getByRole('button', { name: 'Open profile menu' }));
+    expect(
+      screen.getByRole('region', { name: 'Account menu' }),
+    ).toHaveTextContent(donor.email);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(
+      screen.queryByRole('region', { name: 'Account menu' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Open profile menu' }),
+    ).toHaveFocus();
+  });
+  it('opens the mobile drawer and restores focus on Escape', async () => {
+    mount('/dashboard/donor/donations', donor, () =>
+      response({ items: [], pagination }),
+    );
+    await screen.findByRole('heading', { name: 'My donations' });
+    const toggle = screen.getByLabelText('Open workspace navigation');
+    fireEvent.click(toggle);
+    const drawer = screen.getByRole('dialog', { name: 'Workspace navigation' });
+    expect(
+      within(drawer).getByRole('link', { name: 'Incoming requests' }),
+    ).toHaveAttribute('href', '/dashboard/donor/requests');
+    fireEvent(drawer, new Event('cancel', { bubbles: false }));
+    expect(toggle).toHaveFocus();
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  });
+  it('clears a no-match search through the existing API filters', async () => {
+    mount('/dashboard/donor/donations', donor, () =>
+      response({ items: [], pagination }),
+    );
+    await screen.findByRole('link', { name: 'Create your first donation' });
+    fireEvent.change(screen.getByLabelText('Search donations'), {
+      target: { value: 'bread' },
+    });
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Clear filters' }),
+    );
+    expect(screen.getByLabelText('Search donations')).toHaveValue('');
+    await screen.findByRole('link', { name: 'Create your first donation' });
+  });
+  it('falls back from broken food imagery and hides edits for reserved stock', async () => {
+    mount('/dashboard/donor/donations', donor, () =>
+      response({
+        items: [
+          {
+            ...donation,
+            image: { secureUrl: 'https://example.test/food.webp' },
+            reservedQuantity: 2,
+          },
+        ],
+        pagination,
+      }),
+    );
+    fireEvent.error(await screen.findByRole('img', { name: donation.title }));
+    expect(screen.getByText('No photo provided')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'Edit' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Cancel', exact: true }),
+    ).not.toBeInTheDocument();
+  });
+  it('prefills edits and preserves the PATCH payload and declarations', async () => {
+    mount(
+      '/dashboard/donor/donations/listing-one/edit',
+      donor,
+      (url, options) => {
+        if (options.method === 'PATCH') return response({ donation });
+        return response({ donation });
+      },
+    );
+    expect(await screen.findByLabelText('Donation title')).toHaveValue(
+      donation.title,
+    );
+    fireEvent.change(screen.getByLabelText('Donation title'), {
+      target: { value: 'Updated bowls' },
+    });
+    fireEvent.submit(screen.getByRole('form', { name: 'Edit donation' }));
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/donations/listing-one',
+        expect.objectContaining({
+          method: 'PATCH',
+          body: expect.stringContaining('Updated bowls'),
+        }),
+      ),
+    );
+    const input = JSON.parse(
+      fetch.mock.calls.find(([, options]) => options.method === 'PATCH')[1]
+        .body,
+    );
+    expect(input).toMatchObject({
+      quantity: 12,
+      storageConditions: 'Refrigerated',
+      allergenInformation: 'Sesame',
+      handlingDetails: 'Keep cool',
+      packagingDetails: 'Sealed',
+    });
   });
 });

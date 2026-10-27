@@ -1,3 +1,4 @@
+import DonorDonationCard from '../components/DonorDonationCard.jsx';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Search } from 'lucide-react';
@@ -114,11 +115,50 @@ export default function DonationsPage({ mine = false }) {
         {...result}
         retry={result.refresh}
         empty={result.data?.items.length === 0}
+        emptyContent={
+          mine ? (
+            <div className="workspace-state empty-state">
+              <h2>
+                {Object.values(filters).some(Boolean)
+                  ? 'No matching donations.'
+                  : 'Make room for your first good connection.'}
+              </h2>
+              <p>
+                {Object.values(filters).some(Boolean)
+                  ? 'Try a different search, or clear your filters.'
+                  : 'Share surplus food with a clear quantity and collection deadline.'}
+              </p>
+              {Object.values(filters).some(Boolean) ? (
+                <button
+                  className="button button-outline"
+                  onClick={() => {
+                    setFilters({ q: '', category: '', unit: '', status: '' });
+                    setPage(1);
+                  }}
+                >
+                  Clear filters
+                </button>
+              ) : (
+                <Link className="button" to="/dashboard/donor/donations/new">
+                  Create your first donation
+                </Link>
+              )}
+            </div>
+          ) : undefined
+        }
       >
         <div className="donations-grid">
-          {result.data?.items.map((donation) => (
-            <DonationCard key={donation._id} donation={donation} />
-          ))}
+          {result.data?.items.map((donation) =>
+            mine ? (
+              <DonorDonationCard
+                key={donation._id}
+                donation={donation}
+                refresh={result.refresh}
+              />
+            ) : (
+              <DonationCard key={donation._id} donation={donation} />
+            ),
+          )}
         </div>
         <Pagination pagination={result.data?.pagination} onPage={setPage} />
       </DataState>

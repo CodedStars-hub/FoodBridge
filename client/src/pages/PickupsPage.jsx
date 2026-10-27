@@ -50,6 +50,34 @@ function Assignment({ assignment: a, refresh, detail = false }) {
         </div>
         <StatusBadge status={a.status} />
       </div>
+      {user.role === 'donor' && a.status !== 'cancelled' && (
+        <ol className="donor-pickup-progress" aria-label="Pickup progress">
+          {[
+            ['awaiting_volunteer', 'Awaiting'],
+            ['assigned', 'Assigned'],
+            ['en_route_to_pickup', 'En route'],
+            ['picked_up', 'Handover'],
+            ['delivered', 'Received'],
+          ].map(([status, label], index) => {
+            const current = [
+              'awaiting_volunteer',
+              'assigned',
+              'en_route_to_pickup',
+              'picked_up',
+              'delivered',
+            ].indexOf(a.status);
+            return (
+              <li
+                key={status}
+                className={index <= current ? 'is-reached' : ''}
+                aria-current={a.status === status ? 'step' : undefined}
+              >
+                {label}
+              </li>
+            );
+          })}
+        </ol>
+      )}
       <p className="pickup-deadline">
         Pickup cutoff:{' '}
         {a.donation ? formatTime(a.donation.pickupDeadline) : 'Unavailable'}

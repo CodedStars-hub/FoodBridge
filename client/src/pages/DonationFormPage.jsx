@@ -1,7 +1,8 @@
 import LocationFields from '../components/LocationFields.jsx';
 import { locationInput } from '../utils/location.js';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Leaf, Check } from 'lucide-react';
 import { api } from '../utils/api.js';
 import { useApiData } from '../hooks/useApiData.js';
 import { DataState } from '../components/DonationShared.jsx';
@@ -15,120 +16,167 @@ function localTime(value) {
 }
 function DonationForm({ donation }) {
   const navigate = useNavigate();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [fields, setFields] = useState({});
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState(''),
+    [fields, setFields] = useState({}),
+    [photo, setPhoto] = useState(null);
+  const form = useRef(null);
   const editing = !!donation;
   const [initialTime] = useState(() => Date.now());
   async function submit(event) {
     event.preventDefault();
+    if (busy) return;
     setBusy(true);
     setError('');
     setFields({});
     const input = Object.fromEntries(new FormData(event.currentTarget));
-    input.quantity = Number(input.quantity);
-    input.preparationTime = new Date(input.preparationTime).toISOString();
-    input.pickupDeadline = new Date(input.pickupDeadline).toISOString();
     try {
+      input.quantity = Number(input.quantity);
+      input.preparationTime = new Date(input.preparationTime).toISOString();
+      input.pickupDeadline = new Date(input.pickupDeadline).toISOString();
       locationInput(input, donation || {});
+      if (
+        photo &&
+        (!['image/jpeg', 'image/png', 'image/webp'].includes(photo.type) ||
+          photo.size > 5 * 1024 * 1024)
+      )
+        throw new Error('Choose a JPEG, PNG or WebP image up to 5 MiB');
       const data = await api(
         editing ? `/donations/${donation._id}` : '/donations',
         { method: editing ? 'PATCH' : 'POST', body: input },
       );
-      navigate(`/dashboard/donor/donations/${data.donation._id}`);
+      let imageError;
+      if (photo) {
+        const body = new FormData();
+        body.append('file', photo);
+        try {
+          await api(`/donations/${data.donation._id}/image`, {
+            method: 'POST',
+            body,
+          });
+        } catch (failure) {
+          imageError = failure.message;
+        }
+      }
+      navigate(`/dashboard/donor/donations/${data.donation._id}`, {
+        state: imageError ? { imageError } : null,
+      });
     } catch (failure) {
       setError(failure.message);
       setFields(failure.fields || {});
+      requestAnimationFrame(() => {
+        const target =
+          form.current?.querySelector('[aria-invalid="true"]') ||
+          form.current?.querySelector('[role="alert"]');
+        target?.focus();
+      });
     } finally {
       setBusy(false);
     }
   }
-  const declarations = [
-    ['storageConditions', 'Storage conditions', 500],
-    ['packagingDetails', 'Packaging details', 500],
-    ['handlingDetails', 'Handling details', 500],
-    ['allergenInformation', 'Allergen information', 500],
-    ['pickupLocation', 'Pickup location', 500],
-  ];
+  function selectField(name, label, options, value) {
+    return (
+      <div className="form-field">
+        <label htmlFor={name}>{label}</label>
+        <select
+          id={name}
+          name={name}
+          defaultValue={value}
+          aria-invalid={!!fields[name]}
+          aria-describedby={fields[name] ? `${name}-error` : undefined}
+        >
+          {options.map((v) => (
+            <option key={v} value={v}>
+              {readable(v)}
+            </option>
+          ))}
+        </select>
+        {fields[name] && (
+          <span className="field-error" id={`${name}-error`}>
+            {fields[name]}
+          </span>
+        )}
+      </div>
+    );
+  }
   return (
-    <form
-      className="donation-form profile-card"
-      onSubmit={submit}
-      aria-label={editing ? 'Edit donation' : 'Create donation'}
-    >
-      <fieldset disabled={busy}>
-        <legend>Food and quantity</legend>
-        <FormField
-          name="title"
-          label="Donation title"
-          required
-          maxLength={120}
-          defaultValue={donation?.title || ''}
-          error={fields.title}
-        />
-        <div className="profile-fields">
-          <div className="form-field">
-            <label htmlFor="category">Food category</label>
-            <select
-              id="category"
-              name="category"
-              defaultValue={donation?.category || categoryOptions[0]}
-            >
-              {categoryOptions.map((value) => (
-                <option key={value} value={value}>
-                  {readable(value)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="form-field">
-            <label htmlFor="unit">Quantity unit</label>
-            <select
-              id="unit"
-              name="unit"
-              defaultValue={donation?.unit || 'servings'}
-            >
-              {unitOptions.map((value) => (
-                <option key={value}>{value}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <FormField
-          name="quantity"
-          label="Total quantity"
-          type="number"
-          required
-          min={1}
-          max={1000000}
-          step={1}
-          defaultValue={donation?.quantity || ''}
-          hint="Use whole units. Choose grams or millilitres for smaller amounts."
-          error={fields.quantity}
-        />
-        <div className="form-field">
-          <label htmlFor="description">Description</label>
-          <textarea
-            id="description"
-            name="description"
+    <div className="donor-form-layout">
+      <form
+        ref={form}
+        className="donation-form profile-card"
+        onSubmit={submit}
+        aria-label={editing ? 'Edit donation' : 'Create donation'}
+        aria-busy={busy}
+      >
+        <fieldset disabled={busy}>
+          <legend>01 · Food details</legend>
+          <p className="donor-upload-intro">
+            Give community partners a clear picture of what you’re sharing.
+          </p>
+          <FormField
+            name="title"
+            label="Donation title"
             required
-            maxLength={2000}
-            defaultValue={donation?.description || ''}
-            aria-invalid={!!fields.description}
-            aria-describedby={
-              fields.description ? 'description-error' : undefined
-            }
+            maxLength={120}
+            defaultValue={donation?.title || ''}
+            error={fields.title}
           />
-          {fields.description && (
-            <span className="field-error" id="description-error">
-              {fields.description}
-            </span>
+          <div className="form-field">
+            <label htmlFor="description">Description</label>
+            <textarea
+              id="description"
+              name="description"
+              required
+              maxLength={2000}
+              defaultValue={donation?.description || ''}
+              aria-invalid={!!fields.description}
+              aria-describedby={
+                fields.description ? 'description-error' : undefined
+              }
+            />
+            {fields.description && (
+              <span className="field-error" id="description-error">
+                {fields.description}
+              </span>
+            )}
+          </div>
+          {selectField(
+            'category',
+            'Food category',
+            categoryOptions,
+            donation?.category || categoryOptions[0],
           )}
-        </div>
-      </fieldset>
-      <fieldset disabled={busy}>
-        <legend>Collection window</legend>
-        <div className="profile-fields">
+        </fieldset>
+        <fieldset disabled={busy}>
+          <legend>02 · Quantity & unit</legend>
+          <div className="profile-fields">
+            <FormField
+              name="quantity"
+              label="Total quantity"
+              type="number"
+              required
+              min={1}
+              max={1000000}
+              step={1}
+              defaultValue={donation?.quantity || ''}
+              hint="Use whole units. Choose grams or millilitres for smaller amounts."
+              error={fields.quantity}
+            />
+            {selectField(
+              'unit',
+              'Quantity unit',
+              unitOptions,
+              donation?.unit || 'servings',
+            )}
+          </div>
+        </fieldset>
+        <fieldset disabled={busy}>
+          <legend>03 · Preparation & storage</legend>
+          <p className="declaration-note">
+            Describe what you know about the food. These details are not a food
+            safety certification. State known allergens, or that information is
+            unknown.
+          </p>
           <FormField
             name="preparationTime"
             label="Prepared at"
@@ -139,6 +187,25 @@ function DonationForm({ donation }) {
             )}
             error={fields.preparationTime}
           />
+          {[
+            ['storageConditions', 'Storage conditions'],
+            ['packagingDetails', 'Packaging details'],
+            ['handlingDetails', 'Handling details'],
+            ['allergenInformation', 'Allergen information'],
+          ].map(([name, label]) => (
+            <FormField
+              key={name}
+              name={name}
+              label={label}
+              required
+              maxLength={500}
+              defaultValue={donation?.[name] || ''}
+              error={fields[name]}
+            />
+          ))}
+        </fieldset>
+        <fieldset disabled={busy}>
+          <legend>04 · Pickup window & place</legend>
           <FormField
             name="pickupDeadline"
             label="Pickup deadline"
@@ -149,60 +216,95 @@ function DonationForm({ donation }) {
             )}
             error={fields.pickupDeadline}
           />
-        </div>
-        <p className="field-hint">
-          Times are entered in your local timezone. Preparation must be in the
-          past; pickup must be in the future.
-        </p>
-      </fieldset>
-      <fieldset disabled={busy}>
-        <legend>Donor declarations</legend>
-        <p className="declaration-note">
-          Describe what you know about the food. These details are not a food
-          safety certification. For allergens, explicitly state known allergens
-          or that information is unknown.
-        </p>
-        {declarations.map(([name, label, max]) => (
+          <p className="field-hint">
+            Local timezone. Preparation must be in the past; pickup must be in
+            the future and after preparation.
+          </p>
           <FormField
-            key={name}
-            name={name}
-            label={label}
+            name="pickupLocation"
+            label="Pickup location"
             required
-            maxLength={max}
-            defaultValue={donation?.[name] || ''}
-            error={fields[name]}
+            maxLength={500}
+            defaultValue={donation?.pickupLocation || ''}
+            error={fields.pickupLocation}
           />
-        ))}
-        <FormField
-          name="imageUrl"
-          label="Image URL (optional)"
-          type="url"
-          maxLength={2048}
-          defaultValue={donation?.imageUrl || ''}
-          hint="An existing HTTPS image link. No uploads or external image service is required."
-          error={fields.imageUrl}
+        </fieldset>
+        <LocationFields
+          location={donation?.location}
+          disabled={busy}
+          error={fields.location}
         />
-      </fieldset>
-      <LocationFields
-        location={donation?.location}
-        disabled={busy}
-        error={fields.location}
-      />
-      {error && (
-        <div className="form-alert" role="alert">
-          {error}
-          {fields.form && <p>{fields.form}</p>}
+        <fieldset disabled={busy}>
+          <legend>05 · Donation image</legend>
+          <p className="donor-upload-intro">
+            Optional. Uploads attach after the listing is saved. JPEG, PNG or
+            WebP, up to 5 MiB and 20 megapixels. If uploads are unavailable,
+            your saved listing remains available.
+          </p>
+          <div className="form-field">
+            <label htmlFor="new-donation-photo">
+              Choose a food photo (optional)
+            </label>
+            <input
+              id="new-donation-photo"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={(e) => setPhoto(e.target.files?.[0] || null)}
+            />
+          </div>
+          <FormField
+            name="imageUrl"
+            label="Image URL (optional)"
+            type="url"
+            maxLength={2048}
+            readOnly={!!donation?.image}
+            defaultValue={donation?.imageUrl || ''}
+            hint={
+              donation?.image
+                ? 'Managed image URLs are kept unchanged. Upload a replacement here, or remove the image from donation details.'
+                : 'Alternatively, supply an existing HTTPS image link. Cloudinary credentials stay on the server.'
+            }
+            error={fields.imageUrl}
+          />
+        </fieldset>
+        {error && (
+          <div className="form-alert" role="alert" tabIndex={-1}>
+            {error}
+            {fields.form && <p>{fields.form}</p>}
+          </div>
+        )}
+        <div className="hero-actions">
+          <button className="button" disabled={busy}>
+            {busy ? 'Saving…' : editing ? 'Save changes' : 'Publish donation'}
+          </button>
+          <Link className="text-link" to="/dashboard/donor/donations">
+            Back to my donations
+          </Link>
         </div>
-      )}
-      <div className="hero-actions">
-        <button className="button" disabled={busy}>
-          {busy ? 'Saving…' : editing ? 'Save changes' : 'Publish donation'}
-        </button>
-        <Link className="text-link" to="/dashboard/donor/donations">
-          Back to my donations
-        </Link>
-      </div>
-    </form>
+      </form>
+      <aside className="donor-form-guide">
+        <Leaf size={31} strokeWidth={1.2} />
+        <h2>
+          A thoughtful listing
+          <br />
+          goes a long way.
+        </h2>
+        <p>
+          A clear description helps an organization decide what it can use and
+          plan a collection.
+        </p>
+        <ul>
+          <li>Share accurate quantities</li>
+          <li>Include storage and allergens</li>
+          <li>Allow time for collection</li>
+          <li>Keep pickup details current</li>
+        </ul>
+        <p>
+          <Check size={13} /> Your declarations help coordination. They do not
+          certify food safety.
+        </p>
+      </aside>
+    </div>
   );
 }
 export default function DonationFormPage() {
@@ -211,7 +313,7 @@ export default function DonationFormPage() {
     <section className="workspace-page">
       <div className="workspace-title">
         <div>
-          <span className="eyebrow">MAKE GOOD GO FURTHER</span>
+          <span className="eyebrow">A little surplus. A new possibility.</span>
           <h1>{id ? 'Edit donation' : 'Create donation'}</h1>
           <p>
             Share clear details so community partners can plan a collection.

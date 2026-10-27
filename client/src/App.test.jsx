@@ -27,11 +27,21 @@ function renderPage(path = '/') {
 beforeEach(() =>
   vi.stubGlobal(
     'fetch',
-    vi
-      .fn()
-      .mockResolvedValue(
-        reply({ error: { message: 'Authentication required' } }, 401),
-      ),
+    vi.fn().mockImplementation(async (url) => {
+      if (url.includes('/analytics/donor'))
+        return reply({
+          summary: {
+            totalDonations: 0,
+            activeDonations: 0,
+            completedDonations: 0,
+          },
+          monthly: [],
+          range: { from: '2026-01-01', to: '2026-12-31' },
+        });
+      if (url.includes('/donations/mine') || url.includes('/requests?'))
+        return reply({ items: [], pagination: { total: 0, pages: 0 } });
+      return reply({ error: { message: 'Authentication required' } }, 401);
+    }),
   ),
 );
 afterEach(() => vi.unstubAllGlobals());
@@ -39,24 +49,25 @@ describe('FoodBridge application shell', () => {
   it('preserves the landing page and donor/NGO calls to action', async () => {
     renderPage();
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
-      'Good food.Greater purpose.',
+      'Good fooddeserves asecond story.',
     );
     expect(
-      screen.getByRole('link', { name: 'I want to donate food' }),
+      screen.getAllByRole('link', { name: 'Share surplus food' })[0],
     ).toHaveAttribute('href', '/register?role=donor');
-    expect(screen.getByRole('link', { name: 'I’m an NGO' })).toHaveAttribute(
-      'href',
-      '/register?role=ngo',
-    );
     expect(
-      screen.getByRole('heading', { name: 'From extra to extraordinary.' }),
+      screen.getByRole('link', { name: 'Find food for your community' }),
+    ).toHaveAttribute('href', '/register?role=ngo');
+    expect(
+      screen.getByRole('heading', {
+        name: /From surplus/,
+      }),
     ).toBeInTheDocument();
     await waitFor(() => expect(fetch).toHaveBeenCalled());
   });
   it('carries donor intent through navigation', async () => {
     renderPage();
     fireEvent.click(
-      screen.getByRole('link', { name: 'I want to donate food' }),
+      screen.getAllByRole('link', { name: 'Share surplus food' })[0],
     );
     expect(
       await screen.findByRole('heading', { name: 'Create your account' }),
@@ -68,12 +79,57 @@ describe('FoodBridge application shell', () => {
   });
   it('toggles accessible mobile navigation', async () => {
     renderPage();
-    const button = screen.getByRole('button', { name: 'Open navigation' });
+    const button = screen.getByLabelText('Open navigation');
     fireEvent.click(button);
     expect(button).toHaveAttribute('aria-expanded', 'true');
     fireEvent.click(button);
     expect(button).toHaveAttribute('aria-expanded', 'false');
     await waitFor(() => expect(fetch).toHaveBeenCalled());
+  });
+  it('links public sections to real homepage landmarks', async () => {
+    renderPage();
+    const navigation = screen.getByRole('navigation', {
+      name: 'Main navigation',
+    });
+    for (const anchor of navigation.querySelectorAll('a[href^="/#"]')) {
+      expect(document.getElementById(anchor.hash.slice(1))).not.toBeNull();
+    }
+    expect(screen.getByRole('link', { name: 'Lend a hand' })).toHaveAttribute(
+      'href',
+      '/register?role=volunteer',
+    );
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+  });
+  it('closes the public menu on Escape and restores the toggle focus', async () => {
+    renderPage();
+    const button = screen.getByLabelText('Open navigation');
+    fireEvent.click(button);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    expect(button).toHaveFocus();
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+  });
+  it('carries NGO intent into the existing registration form and keeps its design boundary', async () => {
+    renderPage();
+    fireEvent.click(
+      screen.getByRole('link', { name: 'Find food for your community' }),
+    );
+    await screen.findByRole('form', { name: 'Registration' });
+    expect(
+      screen.getByRole('radio', { name: 'NGO', exact: true }),
+    ).toBeChecked();
+    expect(screen.getByLabelText('Organization name')).toBeRequired();
+    expect(document.querySelector('.public-site')).toBeNull();
+    expect(document.querySelector('.auth-form-panel')).toBeInTheDocument();
+  });
+  it('preserves the authenticated public navigation destination', async () => {
+    fetch.mockResolvedValueOnce(
+      reply({ user: { ...donor, role: 'volunteer' } }),
+    );
+    renderPage();
+    expect(
+      await screen.findByRole('link', { name: 'My dashboard' }),
+    ).toHaveAttribute('href', '/dashboard/volunteer');
   });
   it('provides a recovery route', async () => {
     renderPage('/unknown');
@@ -147,13 +203,14 @@ describe('sessions and role-based navigation', () => {
     expect(
       screen.getByRole('navigation', { name: 'Dashboard navigation' }),
     ).toBeInTheDocument();
-    expect(
-      screen.getAllByText(
-        ['donor', 'ngo', 'volunteer'].includes(role)
-          ? 'Ready to use'
-          : 'Upcoming feature',
-      ),
-    ).toHaveLength(role === 'volunteer' ? 2 : 3);
+    if (role === 'donor')
+      expect(screen.getByText('Active listings')).toBeInTheDocument();
+    else
+      expect(
+        screen.getAllByText(
+          role === 'admin' ? 'Upcoming feature' : 'Ready to use',
+        ),
+      ).toHaveLength(role === 'volunteer' ? 2 : 3);
   });
   it('redirects the wrong frontend role to its own dashboard', async () => {
     fetch.mockResolvedValue(reply({ user: donor }));
@@ -195,7 +252,7 @@ describe('sessions and role-based navigation', () => {
         name: 'A little surplus. A lot of possibility.',
       }),
     ).toBeInTheDocument();
-    expect(fetch).toHaveBeenLastCalledWith(
+    expect(fetch).toHaveBeenCalledWith(
       '/api/auth/login',
       expect.objectContaining({
         method: 'POST',
@@ -325,5 +382,158 @@ describe('sessions and role-based navigation', () => {
     expect(
       screen.getByRole('navigation', { name: 'Dashboard navigation' }),
     ).toBeInTheDocument();
+  });
+});
+
+describe('editorial authentication experience', () => {
+  it.each(['donor', 'ngo', 'volunteer'])(
+    'preserves %s URL preselection and public roles only',
+    async (role) => {
+      renderPage(`/register?role=${role}`);
+      await screen.findByRole('form', { name: 'Registration' });
+      const label = { donor: 'Food donor', ngo: 'NGO', volunteer: 'Volunteer' }[
+        role
+      ];
+      expect(
+        screen.getByRole('radio', { name: label, exact: true }),
+      ).toBeChecked();
+      expect(screen.getAllByRole('radio')).toHaveLength(3);
+      if (role === 'ngo')
+        expect(screen.getByLabelText('Organization name')).toBeRequired();
+      else
+        expect(
+          screen.queryByLabelText('Organization name'),
+        ).not.toBeInTheDocument();
+    },
+  );
+  it.each(['/login', '/register'])(
+    'toggles password visibility without changing its value or submitting %s',
+    async (path) => {
+      renderPage(path);
+      const password = await screen.findByLabelText('Password');
+      fireEvent.change(password, {
+        target: { value: 'a private test password' },
+      });
+      expect(password).toHaveAttribute('type', 'password');
+      fireEvent.click(screen.getByRole('button', { name: 'Show password' }));
+      expect(password).toHaveAttribute('type', 'text');
+      expect(password).toHaveValue('a private test password');
+      expect(
+        screen.getByRole('button', { name: 'Hide password' }),
+      ).toHaveAttribute('aria-pressed', 'true');
+      fireEvent.click(screen.getByRole('button', { name: 'Hide password' }));
+      expect(password).toHaveAttribute('type', 'password');
+      expect(fetch).toHaveBeenCalledTimes(1);
+    },
+  );
+  it('switches role-specific fields and sends exactly the existing volunteer signup fields', async () => {
+    renderPage('/register?role=ngo');
+    await screen.findByLabelText('Organization name');
+    fireEvent.click(
+      screen.getByRole('radio', { name: 'Volunteer', exact: true }),
+    );
+    expect(
+      screen.queryByLabelText('Organization name'),
+    ).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Full name'), {
+      target: { value: 'Community Volunteer' },
+    });
+    fireEvent.change(screen.getByLabelText('Email address'), {
+      target: { value: 'volunteer@example.test' },
+    });
+    fireEvent.change(screen.getByLabelText('Password'), {
+      target: { value: 'strong test password' },
+    });
+    fetch.mockResolvedValueOnce(
+      reply({ error: { message: 'Please retry' } }, 503),
+    );
+    fireEvent.submit(screen.getByRole('form', { name: 'Registration' }));
+    await screen.findByRole('alert');
+    expect(JSON.parse(fetch.mock.calls.at(-1)[1].body)).toEqual({
+      name: 'Community Volunteer',
+      email: 'volunteer@example.test',
+      password: 'strong test password',
+      phone: '',
+      role: 'volunteer',
+    });
+    expect(fetch.mock.calls.at(-1)[1].headers).toEqual({
+      'Content-Type': 'application/json',
+      'X-CSRF-Protection': 'foodbridge',
+    });
+  });
+  it('retains native registration validation constraints and focuses server field errors', async () => {
+    renderPage('/register?role=ngo');
+    const password = await screen.findByLabelText('Password');
+    expect(password).toHaveAttribute('minlength', '12');
+    expect(password).toHaveAttribute('maxlength', '72');
+    expect(screen.getByLabelText('Email address')).toHaveAttribute(
+      'type',
+      'email',
+    );
+    expect(screen.getByLabelText('Full name')).toBeRequired();
+    fetch.mockResolvedValueOnce(
+      reply(
+        {
+          error: {
+            message: 'Please check the submitted fields',
+            fields: { email: 'Enter a valid email' },
+          },
+        },
+        400,
+      ),
+    );
+    fireEvent.submit(screen.getByRole('form', { name: 'Registration' }));
+    await screen.findByText('Enter a valid email');
+    expect(screen.getByLabelText('Email address')).toHaveFocus();
+    expect(screen.getByLabelText('Email address')).toHaveAccessibleDescription(
+      'Enter a valid email',
+    );
+    expect(password).toHaveAccessibleDescription(
+      'At least 12 characters; at most 72 UTF-8 bytes.',
+    );
+  });
+  it('disables editing and repeat submissions while login is pending', async () => {
+    renderPage('/login');
+    const password = await screen.findByLabelText('Password');
+    let finish;
+    fetch.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const form = screen.getByRole('form', { name: 'Login' });
+    fireEvent.submit(form);
+    expect(form).toHaveAttribute('aria-busy', 'true');
+    expect(password).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Logging in…' })).toBeDisabled();
+    fireEvent.submit(form);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    finish(reply({ error: { message: 'Invalid email or password' } }, 401));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Invalid email or password',
+    );
+    expect(password).not.toBeDisabled();
+    expect(screen.getByRole('alert')).toHaveFocus();
+  });
+  it('keeps home and registration navigation functional without unsupported recovery links', async () => {
+    renderPage('/login');
+    await screen.findByRole('form', { name: 'Login' });
+    expect(screen.getByRole('link', { name: 'Back to home' })).toHaveAttribute(
+      'href',
+      '/',
+    );
+    expect(
+      screen.queryByRole('link', { name: /forgot|reset/i }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole('link', { name: 'Create an account', exact: true }),
+    );
+    await screen.findByRole('form', { name: 'Registration' });
+    expect(screen.getByLabelText('Password')).toHaveAttribute(
+      'type',
+      'password',
+    );
+    fireEvent.click(screen.getByRole('link', { name: 'Log in', exact: true }));
+    await screen.findByRole('form', { name: 'Login' });
   });
 });

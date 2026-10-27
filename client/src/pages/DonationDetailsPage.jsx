@@ -1,7 +1,8 @@
+import { DonationPhoto } from '../components/DonorDonationCard.jsx';
 import DonationImageManager from '../components/DonationImageManager.jsx';
 import LocationMap from '../components/LocationMap.jsx';
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth.js';
 import { useApiData } from '../hooks/useApiData.js';
 import { api } from '../utils/api.js';
@@ -107,6 +108,7 @@ function RequestForm({ donation, refresh }) {
 }
 export default function DonationDetailsPage() {
   const { id } = useParams();
+  const { state } = useLocation();
   const { user } = useAuth();
   const result = useApiData(`/donations/${id}`);
   const donation = result.data?.donation;
@@ -128,6 +130,12 @@ export default function DonationDetailsPage() {
       >
         ← Back to donations
       </Link>
+      {state?.imageError && (
+        <p role="alert" className="form-alert">
+          The donation was saved. Its image could not be uploaded:{' '}
+          {state.imageError}. You can retry below.
+        </p>
+      )}
       <DataState {...result} retry={result.refresh}>
         {donation && (
           <>
@@ -146,14 +154,22 @@ export default function DonationDetailsPage() {
             </div>
             <div className="detail-grid">
               <section className="profile-card donation-details">
-                {donation.image?.secureUrl && (
-                  <img
-                    className="donation-detail-image"
-                    src={donation.image.secureUrl}
-                    alt={donation.title}
-                    loading="lazy"
-                    referrerPolicy="no-referrer"
+                {user.role === 'donor' ? (
+                  <DonationPhoto
+                    key={donation.image?.secureUrl || donation._id}
+                    donation={donation}
+                    className="donor-detail-photo"
                   />
+                ) : (
+                  donation.image?.secureUrl && (
+                    <img
+                      className="donation-detail-image"
+                      src={donation.image.secureUrl}
+                      alt={donation.title}
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
+                    />
+                  )
                 )}
                 <p>{donation.description}</p>
                 <dl className="inventory-totals">

@@ -8,7 +8,14 @@ export function StatusBadge({ status }) {
     <span className={`status-badge status-${status}`}>{readable(status)}</span>
   );
 }
-export function DataState({ loading, error, retry, empty, children }) {
+export function DataState({
+  loading,
+  error,
+  retry,
+  empty,
+  emptyContent,
+  children,
+}) {
   if (loading)
     return (
       <div className="workspace-state" role="status">
@@ -28,14 +35,16 @@ export function DataState({ loading, error, retry, empty, children }) {
     );
   if (empty)
     return (
-      <div className="workspace-state empty-state">
-        <Leaf size={36} />
-        <h2>Nothing here just yet.</h2>
-        <p>
-          Try changing your filters or check back as the community shares more
-          food.
-        </p>
-      </div>
+      emptyContent || (
+        <div className="workspace-state empty-state">
+          <Leaf size={36} />
+          <h2>Nothing here just yet.</h2>
+          <p>
+            Try changing your filters or check back as the community shares more
+            food.
+          </p>
+        </div>
+      )
     );
   return children;
 }
