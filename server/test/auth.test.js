@@ -6,6 +6,10 @@ import { User } from '../src/models/User.js';
 import { createApp } from '../src/app.js';
 import { parseEnvironment } from '../src/config/env.js';
 import { cookieName } from '../src/services/sessionService.js';
+import {
+  redisRestFixture,
+  redisFixtureEnvironment,
+} from './helpers/redisRestFixture.js';
 vi.mock('../src/middleware/databaseReady.js', () => ({
   databaseReady: (_req, _res, next) => next(),
 }));
@@ -330,12 +334,15 @@ describe('cookies, CORS, CSRF, and rate limits', () => {
     expect(response.body).not.toHaveProperty('token');
   });
   it('uses a Secure host-prefixed cookie in production', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(redisRestFixture().fetch);
     const production = createApp({
       ...config,
+      ...redisFixtureEnvironment,
       NODE_ENV: 'production',
       COOKIE_SAME_SITE: 'none',
     });
     const response = await register(request(production));
+    expect(response.status).toBe(201);
     expect(response.headers['set-cookie'][0]).toMatch(
       /^__Host-foodbridge_session=/,
     );

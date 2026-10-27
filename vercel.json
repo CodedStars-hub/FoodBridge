@@ -3,13 +3,24 @@
   "installCommand": "npm ci --include=dev",
   "buildCommand": "npm run build -w client",
   "outputDirectory": "client/dist",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "DENY" },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
         {
           "key": "Referrer-Policy",
           "value": "strict-origin-when-cross-origin"

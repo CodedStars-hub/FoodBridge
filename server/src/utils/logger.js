@@ -10,6 +10,7 @@ const events = new Set([
   'job_skipped',
   'readiness_failed',
   'server_started',
+  'demo_rate_limit_mode',
   'server_failed',
   'database_connected',
   'database_unconfigured',

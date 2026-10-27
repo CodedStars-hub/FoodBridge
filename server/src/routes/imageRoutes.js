@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { rateLimit } from 'express-rate-limit';
+import { sharedRateLimitStore } from '../stores/redisRateLimitStore.js';
 import { z } from 'zod';
 import { requireAuth, authorizeRoles } from '../middleware/auth.js';
 import { validId } from '../controllers/donationController.js';
@@ -54,6 +55,8 @@ export function createImageRoutes(config) {
     rateLimit({
       windowMs: 15 * 60000,
       limit: 30,
+      store: sharedRateLimitStore(config, 'image-upload'),
+      passOnStoreError: false,
       keyGenerator: (req) => String(req.user._id),
       standardHeaders: 'draft-8',
       legacyHeaders: false,

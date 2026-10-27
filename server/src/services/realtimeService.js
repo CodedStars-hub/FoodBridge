@@ -6,6 +6,9 @@ import { Notification } from '../models/Notification.js';
 import { cookieName, verifySession } from './sessionService.js';
 import { logger as defaultLogger } from '../utils/logger.js';
 import { runJob, JobFailure } from '../utils/jobRunner.js';
+// Each instance reconciles only its own authenticated recipients. MongoDB is the
+// durable cross-instance source, not a globally consumed broadcastAt flag.
+const instanceSnapshots = new WeakMap();
 export async function dispatchNotifications(
   io,
   { logger = defaultLogger, failOnError = false } = {},
@@ -14,39 +17,96 @@ export async function dispatchNotifications(
     if (failOnError) throw new Error('Database unavailable');
     return 0;
   }
-  const pending = await Notification.find({ broadcastAt: null })
-    .sort({ createdAt: 1 })
-    .limit(100)
-    .lean();
-  const users = new Map();
-  for (const row of pending) {
-    const key = String(row.recipient);
-    if (!users.has(key)) users.set(key, []);
-    users.get(key).push(row._id);
+  let snapshots = instanceSnapshots.get(io);
+  if (!snapshots) {
+    snapshots = new Map();
+    instanceSnapshots.set(io, snapshots);
   }
+  const recipients = new Map();
+  for (const socket of io.sockets.sockets.values()) {
+    const id = socket.data.userId;
+    if (!recipients.has(id)) recipients.set(id, []);
+    recipients.get(id).push(socket);
+  }
+  for (const id of snapshots.keys())
+    if (!recipients.has(id)) snapshots.delete(id);
+  if (!recipients.size) return 0;
   let sent = 0;
   let failed = 0;
-  for (const [id, ids] of users) {
+  // Bound each query while allowing more connected recipients in later batches.
+  const ids = [...recipients.keys()];
+  for (let offset = 0; offset < ids.length; offset += 100) {
+    const batch = ids.slice(offset, offset + 100);
     try {
-      const current = await User.findById(id).select('+tokenVersion');
-      const sockets = await io.in(`user:${id}`).fetchSockets();
-      for (const socket of sockets)
-        if (
-          !current ||
-          socket.data.version !== current.tokenVersion ||
-          socket.data.expiresAt <= Date.now()
-        )
-          socket.disconnect(true);
-      io.to(`user:${id}`).emit('notifications:changed', {});
-      await Notification.updateMany(
-        { _id: { $in: ids }, broadcastAt: null },
-        { $set: { broadcastAt: new Date() } },
-      );
-      sent += ids.length;
+      const objectIds = batch.map((id) => new mongoose.Types.ObjectId(id));
+      const [users, summaries] = await Promise.all([
+        User.find({ _id: { $in: objectIds } })
+          .select('_id +tokenVersion')
+          .maxTimeMS(3000)
+          .lean(),
+        Notification.aggregate([
+          { $match: { recipient: { $in: objectIds } } },
+          {
+            $group: {
+              _id: '$recipient',
+              count: { $sum: 1 },
+              unread: {
+                $sum: {
+                  $cond: [
+                    { $eq: [{ $ifNull: ['$readAt', null] }, null] },
+                    1,
+                    0,
+                  ],
+                },
+              },
+              latest: { $max: '$_id' },
+              updatedAt: { $max: '$updatedAt' },
+            },
+          },
+        ]).option({ maxTimeMS: 3000 }),
+      ]);
+      const accounts = new Map(users.map((user) => [String(user._id), user]));
+      const inboxes = new Map(summaries.map((row) => [String(row._id), row]));
+      for (const id of batch) {
+        try {
+          const user = accounts.get(id);
+          const sockets = recipients.get(id);
+          let eligible = false;
+          for (const socket of sockets) {
+            if (
+              !user ||
+              socket.data.version !== user.tokenVersion ||
+              socket.data.expiresAt <= Date.now()
+            )
+              socket.disconnect(true);
+            else eligible = true;
+          }
+          if (!eligible) {
+            snapshots.delete(id);
+            continue;
+          }
+          const row = inboxes.get(id);
+          const signature = JSON.stringify(
+            row ? [row.count, row.unread, row.latest, row.updatedAt] : [],
+          );
+          if (snapshots.get(id) !== signature) {
+            // Empty first connection already receives notifications:sync. Repeated hints
+            // invalidate the same ID-keyed inbox; they never append notification items.
+            if (row || snapshots.has(id)) {
+              io.to(`user:${id}`).emit('notifications:changed', {});
+              sent++;
+            }
+            snapshots.set(id, signature);
+          }
+        } catch (error) {
+          failed++;
+          logger.warn('job_item_failed', { job: 'notification_outbox', error });
+          // Do not advance this recipient's snapshot after a failed emit.
+        }
+      }
     } catch (error) {
-      failed++;
+      failed += batch.length;
       logger.warn('job_item_failed', { job: 'notification_outbox', error });
-      /* Retry pending outbox rows; delivery failures never touch business state. */
     }
   }
   if (failed && failOnError) throw new JobFailure({ sent, failed });
@@ -98,29 +158,33 @@ export function attachRealtime(server, app, config, { poll = true } = {}) {
   app.set('io', io);
   let inFlight;
   const logger = app.get('logger') || defaultLogger;
-  const tick = () => {
-    if (inFlight) return;
+  const flush = () => {
+    if (inFlight) return inFlight;
     inFlight = runJob(
       'notification_outbox',
       async () => ({
         sent: await dispatchNotifications(io, { logger, failOnError: true }),
       }),
       { logger },
-    )
-      .catch(() => {
-        /* Failure already logged; database recovery will retry. */
-      })
-      .finally(() => {
-        inFlight = null;
-      });
+    ).finally(() => {
+      inFlight = null;
+    });
+    return inFlight;
   };
-  const timer = poll ? setInterval(tick, 2000) : null;
+  const timer = poll
+    ? setInterval(() => {
+        void flush().catch(() => {
+          /* Durable inbox and unchanged snapshots retry on the next active tick. */
+        });
+      }, 2000)
+    : null;
   timer?.unref();
   return {
     io,
+    flush,
     close: async () => {
       if (timer) clearInterval(timer);
-      await inFlight;
+      await inFlight?.catch(() => {});
       app.set('io', null);
       await new Promise((resolve) => io.close(resolve));
     },

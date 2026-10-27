@@ -12,11 +12,13 @@ describe('production frontend hosting contract', () => {
     expect(config.installCommand).toBe('npm ci --include=dev');
     expect(config).not.toHaveProperty('env');
   });
-  it('provides an index fallback for public and protected deep links', () => {
-    const fallback = config.rewrites.find(
-      (rule) => rule.destination === '/index.html',
-    );
-    expect(fallback).toBeDefined();
+  it('serves only the frontend SPA, without a backend Function or API rewrite', () => {
+    expect(config).not.toHaveProperty('functions');
+    expect(config.rewrites).toEqual([
+      { source: '/(.*)', destination: '/index.html' },
+    ]);
+    const fallback = config.rewrites.at(-1);
+    expect(fallback.destination).toBe('/index.html');
     const match = new RegExp(`^${fallback.source}$`);
     for (const path of [
       '/register',

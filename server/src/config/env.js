@@ -45,7 +45,32 @@ const schema = z.object({
   COOKIE_SAME_SITE: z.enum(['lax', 'strict', 'none']).default('lax'),
   LOGIN_RATE_LIMIT: z.coerce.number().int().min(1).default(20),
   REGISTER_RATE_LIMIT: z.coerce.number().int().min(1).default(10),
+  UPSTASH_REDIS_REST_URL: z
+    .string()
+    .default('')
+    .refine((value) => {
+      if (!value) return true;
+      const url = URL.parse(value);
+      return (
+        !!url &&
+        url.protocol === 'https:' &&
+        !url.username &&
+        !url.password &&
+        !url.search &&
+        !url.hash &&
+        (url.pathname === '/' || url.pathname === '')
+      );
+    }, 'Must be an HTTPS REST origin'),
+  UPSTASH_REDIS_REST_TOKEN: z.string().trim().default(''),
+  RATE_LIMIT_STORE: z.enum(['auto', 'redis', 'process-demo']).default('auto'),
+  DEMO_SINGLE_PROCESS: z.enum(['true', 'false']).default('false'),
+  RATE_LIMIT_NAMESPACE: z
+    .string()
+    .regex(/^[a-zA-Z0-9_-]{1,64}$/)
+    .default('foodbridge'),
   TRUSTED_PROXY_CIDRS: z.string().default(''),
+  CLIENT_IP_SOURCE: z.enum(['express', 'socket', 'vercel']).default('express'),
+  VERCEL: z.enum(['0', '1']).default('0'),
   RENDER: z.enum(['true', 'false']).default('false'),
   RENDER_SERVICE_TYPE: z.string().optional(),
   CLIENT_ORIGINS: z.string().optional(),
@@ -76,12 +101,42 @@ export function parseEnvironment(source = process.env) {
     );
   }
   const config = result.data;
+  if (!!config.UPSTASH_REDIS_REST_URL !== !!config.UPSTASH_REDIS_REST_TOKEN)
+    throw new Error(
+      'Shared rate limiting requires UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN',
+    );
   config.TRUSTED_PROXY_CIDRS = parseTrustedProxies(config.TRUSTED_PROXY_CIDRS);
+  if (config.CLIENT_IP_SOURCE === 'socket' && config.TRUSTED_PROXY_CIDRS.length)
+    throw new Error('Socket-only client handling must not trust proxy CIDRs');
+  if (
+    config.RATE_LIMIT_STORE === 'process-demo' &&
+    (config.NODE_ENV !== 'production' ||
+      config.RENDER !== 'true' ||
+      config.VERCEL === '1' ||
+      config.DEMO_SINGLE_PROCESS !== 'true' ||
+      config.CLIENT_IP_SOURCE !== 'socket' ||
+      config.UPSTASH_REDIS_REST_URL ||
+      config.UPSTASH_REDIS_REST_TOKEN)
+  )
+    throw new Error(
+      'process-demo requires a single production Render process, socket-only identity, and no Redis credentials',
+    );
+  if (
+    config.CLIENT_IP_SOURCE === 'vercel' &&
+    (config.NODE_ENV !== 'production' ||
+      config.VERCEL !== '1' ||
+      config.RENDER === 'true' ||
+      config.TRUSTED_PROXY_CIDRS.length)
+  )
+    throw new Error(
+      'Vercel client IP handling requires an exclusive production Vercel runtime',
+    );
   if (
     config.NODE_ENV === 'production' &&
     config.RENDER === 'true' &&
     (!config.RENDER_SERVICE_TYPE || config.RENDER_SERVICE_TYPE === 'web') &&
-    !config.TRUSTED_PROXY_CIDRS.length
+    !config.TRUSTED_PROXY_CIDRS.length &&
+    config.CLIENT_IP_SOURCE !== 'socket'
   )
     throw new Error('Render web services require verified TRUSTED_PROXY_CIDRS');
   config.CLIENT_ORIGINS = (config.CLIENT_ORIGINS || config.CLIENT_ORIGIN)

@@ -271,6 +271,44 @@ describe('durable notification inbox', () => {
       }),
     );
   });
+  it('reconciles repeated hints, dropped connections and cross-tab read changes without duplicate items', async () => {
+    let read = false;
+    fetch.mockImplementation(async () =>
+      response({
+        items: [{ ...note, readAt: read ? '2026-10-27T10:00:00Z' : null }],
+        unreadCount: read ? 0 : 1,
+        pagination: { page: 1, pages: 1, total: 1 },
+      }),
+    );
+    mount(<NotificationBell />);
+    const bell = await screen.findByRole('button', {
+      name: 'Notifications, 1 unread',
+    });
+    fireEvent.click(bell);
+    await screen.findByText(note.message);
+    await waitFor(() =>
+      expect(live.handlers['notifications:changed']).toBeTypeOf('function'),
+    );
+    act(() => {
+      live.handlers['notifications:changed']();
+      live.handlers['notifications:changed']();
+      live.handlers['notifications:sync']();
+    });
+    await waitFor(() =>
+      expect(screen.getAllByText(note.message)).toHaveLength(1),
+    );
+    act(() => live.handlers.disconnect());
+    read = true;
+    act(() => {
+      live.handlers.connect();
+      live.handlers['notifications:sync']();
+    });
+    expect(
+      await screen.findByRole('button', { name: 'Notifications, 0 unread' }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(note.message)).toHaveLength(1);
+    expect(screen.getByText('Read', { exact: true })).toBeInTheDocument();
+  });
   it('marks only the chosen inbox notification read and recalculates unread totals', async () => {
     let read = false;
     fetch.mockImplementation(async (url, options) => {

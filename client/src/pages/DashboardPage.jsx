@@ -185,7 +185,7 @@ export default function DashboardPage() {
           <span className="ws-avatar">{user.name.charAt(0)}</span>
           <div>
             <strong>{user.name}</strong>
-            <span>{user.verificationStatus} account</span>
+            <span>{user.verificationStatus} verification</span>
           </div>
         </div>
       </>

@@ -166,6 +166,28 @@ async function inventory(id, remaining, reserved, completed = 0) {
   expect(doc.quantity).toBe(remaining + reserved + completed);
 }
 describe('donation creation, validation, listing and ownership', () => {
+  it.each(['ngo', 'volunteer'])(
+    'rechecks the database role when a previously restored donor session becomes %s',
+    async (role) => {
+      const restored = await call('get', '/api/auth/me');
+      expect(restored.status).toBe(200);
+      expect(restored.body.user).toMatchObject({
+        role: 'donor',
+        verificationStatus: 'pending',
+      });
+      await User.updateOne(
+        { _id: actors.donor._id },
+        { $set: { role, organizationName: 'Isolated role-change fixture' } },
+      );
+      const rejected = await call('post', '/api/donations', 'donor', payload());
+      expect(rejected.status).toBe(403);
+      expect(rejected.body.error.message).toBe(
+        'You do not have permission to access this resource',
+      );
+      expect(await Donation.countDocuments()).toBe(0);
+      expect((await call('get', '/api/auth/me')).body.user.role).toBe(role);
+    },
+  );
   it('creates a donor-owned donation with server-owned inventory', async () => {
     const d = await donation();
     expect(d.donor).toBe(String(actors.donor._id));
@@ -1506,8 +1528,22 @@ describe('persistent notifications and transactional outbox', () => {
     const pendingCount = await Notification.countDocuments({
       broadcastAt: null,
     });
+    const recipients = await Notification.distinct('recipient');
+    const connected = new Map(
+      recipients.map((recipient) => [
+        String(recipient),
+        {
+          data: {
+            userId: String(recipient),
+            version: 0,
+            expiresAt: Date.now() + 3600000,
+          },
+          disconnect: vi.fn(),
+        },
+      ]),
+    );
     const failing = {
-      in: () => ({ fetchSockets: async () => [] }),
+      sockets: { sockets: connected },
       to: () => ({
         emit: () => {
           throw new Error('transport unavailable');
@@ -1526,12 +1562,13 @@ describe('persistent notifications and transactional outbox', () => {
     );
     expect((await DonationRequest.findById(r._id)).status).toBe('completed');
     await inventory(d._id, 6, 0, 4);
-    const healthy = {
-      in: () => ({ fetchSockets: async () => [] }),
-      to: () => ({ emit: vi.fn() }),
-    };
-    expect(await dispatchNotifications(healthy)).toBe(pendingCount);
-    expect(await Notification.countDocuments({ broadcastAt: null })).toBe(0);
+    failing.to = () => ({ emit: vi.fn() });
+    expect(await dispatchNotifications(failing)).toBe(recipients.length);
+    expect(await dispatchNotifications(failing)).toBe(0);
+    // Delivery hints never globally consume another instance's durable inbox work.
+    expect(await Notification.countDocuments({ broadcastAt: null })).toBe(
+      pendingCount,
+    );
   });
   it('does not duplicate events when an invalid repeated transition is retried', async () => {
     const d = await donation();
@@ -1568,16 +1605,16 @@ describe('persistent notifications and transactional outbox', () => {
 });
 let socketRuntime;
 const socketClients = [];
+const socketRuntimes = [];
 afterEach(async () => {
   for (const client of socketClients.splice(0)) client.disconnect();
-  if (socketRuntime) {
-    await socketRuntime.close();
-    socketRuntime = null;
-  }
+  for (const runtime of socketRuntimes.splice(0)) await runtime.close();
+  socketRuntime = null;
 });
-async function socketServer() {
-  const server = createServer(app);
-  socketRuntime = attachRealtime(server, app, config, { poll: false });
+async function socketServer(application = app) {
+  const server = createServer(application);
+  socketRuntime = attachRealtime(server, application, config, { poll: false });
+  socketRuntimes.push(socketRuntime);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   return `http://127.0.0.1:${server.address().port}`;
 }
@@ -1667,6 +1704,152 @@ describe('Socket.IO authentication, authorization and reconnect', () => {
     expect(
       (await call('get', '/api/notifications', 'donor')).body.unreadCount,
     ).toBe(2);
+  });
+  it('reconciles durable notifications across two instances without consuming another recipient connection', async () => {
+    const appA = createApp(config),
+      appB = createApp(config);
+    const urlA = await socketServer(appA),
+      runtimeA = socketRuntime;
+    const urlB = await socketServer(appB),
+      runtimeB = socketRuntime;
+    const donorA = socketClient(urlA, 'donor'),
+      donorB = socketClient(urlB, 'donor'),
+      otherB = socketClient(urlB, 'ngo');
+    await Promise.all([connects(donorA), connects(donorB), connects(otherB)]);
+    let otherHints = 0;
+    otherB.on('notifications:changed', () => otherHints++);
+    const d = await donation();
+    const created = await call(
+      'post',
+      `/api/donations/${d._id}/requests`,
+      'ngo',
+      { requestedQuantity: 2, message: 'Isolated cross-instance request' },
+      appA,
+    );
+    expect(created.status).toBe(201);
+    const hintA = new Promise((resolve) =>
+      donorA.once('notifications:changed', resolve),
+    );
+    await runtimeA.flush();
+    await hintA;
+    const hintB = new Promise((resolve) =>
+      donorB.once('notifications:changed', resolve),
+    );
+    await runtimeB.flush();
+    await hintB;
+    expect(otherHints).toBe(0);
+    const inbox = await call(
+      'get',
+      '/api/notifications',
+      'donor',
+      undefined,
+      appB,
+    );
+    expect(inbox.body.items).toHaveLength(1);
+    expect(inbox.body.unreadCount).toBe(1);
+    expect(
+      (await call('get', '/api/notifications', 'ngo', undefined, appB)).body
+        .items,
+    ).toEqual([]);
+    const id = inbox.body.items[0].id;
+    expect(
+      (await call('patch', `/api/notifications/${id}/read`, 'ngo', {}, appA))
+        .status,
+    ).toBe(404);
+    expect(await runtimeA.flush()).toMatchObject({ sent: 0 });
+    expect(await runtimeB.flush()).toMatchObject({ sent: 0 });
+    expect(
+      (await call('patch', `/api/notifications/${id}/read`, 'donor', {}, appA))
+        .status,
+    ).toBe(200);
+    const readHint = new Promise((resolve) =>
+      donorB.once('notifications:changed', resolve),
+    );
+    await runtimeB.flush();
+    await readHint;
+    expect(
+      (await call('get', '/api/notifications', 'donor', undefined, appB)).body
+        .unreadCount,
+    ).toBe(0);
+    // A producer instance can disappear; reconnection and HTTP state remain authoritative.
+    donorA.disconnect();
+    donorB.disconnect();
+    await runtimeA.close();
+    socketRuntimes.splice(socketRuntimes.indexOf(runtimeA), 1);
+    await persistNotification({
+      recipient: actors.donor._id,
+      eventKey: 'after-instance-termination',
+      type: 'request_accepted',
+      message: 'Durable offline update',
+    });
+    const again = socketClient(urlB, 'donor');
+    const sync = new Promise((resolve) =>
+      again.once('notifications:sync', resolve),
+    );
+    await connects(again);
+    await sync;
+    const restored = await call(
+      'get',
+      '/api/notifications',
+      'donor',
+      undefined,
+      appB,
+    );
+    expect(restored.body.items).toHaveLength(2);
+    expect(new Set(restored.body.items.map((row) => row.id)).size).toBe(2);
+    expect(restored.body.unreadCount).toBe(1);
+    expect(
+      (await call('patch', '/api/notifications/read-all', 'donor', {}, appB))
+        .body.unreadCount,
+    ).toBe(0);
+  });
+  it('disconnects a revoked socket on another instance before it receives inbox hints', async () => {
+    const otherApp = createApp(config);
+    const url = await socketServer(otherApp);
+    const recipient = socketClient(url, 'donor');
+    await connects(recipient);
+    let hints = 0;
+    recipient.on('notifications:changed', () => hints++);
+    expect(
+      (await call('post', '/api/auth/logout', 'donor', {}, createApp(config)))
+        .status,
+    ).toBe(204);
+    const disconnected = new Promise((resolve) =>
+      recipient.once('disconnect', resolve),
+    );
+    await socketRuntime.flush();
+    await disconnected;
+    expect(hints).toBe(0);
+    expect((await call('get', '/api/notifications', 'donor')).status).toBe(401);
+  });
+  it('retains committed inbox state and retries reconciliation after a database read outage', async () => {
+    const url = await socketServer();
+    const recipient = socketClient(url, 'donor');
+    await connects(recipient);
+    await persistNotification({
+      recipient: actors.donor._id,
+      eventKey: 'read-outage',
+      type: 'request_created',
+      message: 'Survives sync outage',
+    });
+    const aggregate = vi
+      .spyOn(Notification, 'aggregate')
+      .mockImplementationOnce(() => ({
+        option: () =>
+          Promise.reject(new Error('isolated database read outage')),
+      }));
+    await expect(socketRuntime.flush()).rejects.toMatchObject({
+      name: 'JobFailure',
+    });
+    aggregate.mockRestore();
+    const hint = new Promise((resolve) =>
+      recipient.once('notifications:changed', resolve),
+    );
+    await socketRuntime.flush();
+    await hint;
+    expect(
+      (await call('get', '/api/notifications', 'donor')).body.items,
+    ).toHaveLength(1);
   });
   it('disconnects live sockets on logout and rejects the copied old cookie', async () => {
     const url = await socketServer();
@@ -1775,6 +1958,7 @@ describe('authenticated managed image uploads with isolated Cloudinary adapter',
     for (const [actor, status] of [
       [null, 401],
       ['ngo', 403],
+      ['volunteer', 403],
       ['other', 403],
     ])
       expect((await imageRequest(d._id, { actor, buffer })).status).toBe(

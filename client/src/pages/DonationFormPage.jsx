@@ -8,6 +8,7 @@ import { useApiData } from '../hooks/useApiData.js';
 import { DataState } from '../components/DonationShared.jsx';
 import { categoryOptions, unitOptions, readable } from '../utils/donation.js';
 import FormField from '../components/FormField.jsx';
+import { useAuth } from '../auth/useAuth.js';
 function localTime(value) {
   const date = new Date(value);
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000)
@@ -16,8 +17,10 @@ function localTime(value) {
 }
 function DonationForm({ donation }) {
   const navigate = useNavigate();
+  const { user, retry } = useAuth();
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
+    [refreshSession, setRefreshSession] = useState(false),
     [fields, setFields] = useState({}),
     [photo, setPhoto] = useState(null);
   const form = useRef(null);
@@ -28,6 +31,7 @@ function DonationForm({ donation }) {
     if (busy) return;
     setBusy(true);
     setError('');
+    setRefreshSession(false);
     setFields({});
     const input = Object.fromEntries(new FormData(event.currentTarget));
     try {
@@ -62,7 +66,16 @@ function DonationForm({ donation }) {
         state: imageError ? { imageError } : null,
       });
     } catch (failure) {
-      setError(failure.message);
+      const roleDenied =
+        failure.status === 403 &&
+        failure.message ===
+          'You do not have permission to access this resource';
+      setRefreshSession(roleDenied);
+      setError(
+        roleDenied
+          ? 'Only donor accounts can create or edit donations. Your account details may have changed since this page opened. Refresh your account or sign out and sign in with a donor account.'
+          : failure.message,
+      );
       setFields(failure.fields || {});
       requestAnimationFrame(() => {
         const target =
@@ -271,6 +284,13 @@ function DonationForm({ donation }) {
           <div className="form-alert" role="alert" tabIndex={-1}>
             {error}
             {fields.form && <p>{fields.form}</p>}
+            {refreshSession && (
+              <p>
+                <button type="button" className="text-link" onClick={retry}>
+                  Refresh account
+                </button>
+              </p>
+            )}
           </div>
         )}
         <div className="hero-actions">
@@ -299,6 +319,12 @@ function DonationForm({ donation }) {
           <li>Allow time for collection</li>
           <li>Keep pickup details current</li>
         </ul>
+        {user.verificationStatus === 'pending' && (
+          <p>
+            Your verification is pending. Donor accounts can still publish
+            donations; pending verification does not block this form.
+          </p>
+        )}
         <p>
           <Check size={13} /> Your declarations help coordination. They do not
           certify food safety.

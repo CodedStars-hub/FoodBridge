@@ -391,6 +391,107 @@ describe('donor operational workspace', () => {
       unit: 'servings',
     });
   });
+  it('explains pending donor verification without preventing the create form', async () => {
+    mount('/dashboard/donor/donations/new');
+    expect(
+      await screen.findByRole('form', { name: 'Create donation' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Donor accounts can still publish donations/),
+    ).toBeInTheDocument();
+    expect(screen.getByText('pending verification')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Publish donation' }),
+    ).toBeEnabled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(fetch.mock.calls.some(([url]) => url === '/api/donations/new')).toBe(
+      false,
+    );
+  });
+  it.each(['ngo', 'volunteer'])(
+    'explains role denial and refreshes the stale donor session to the current %s workspace',
+    async (role) => {
+      let changed = false;
+      extra = (u, o) => {
+        if (u.pathname === '/api/auth/me' && changed)
+          return reply({
+            user: { ...user, role, organizationName: 'Isolated community' },
+          });
+        if (u.pathname === '/api/donations' && o.method === 'POST') {
+          changed = true;
+          return reply(
+            {
+              error: {
+                message: 'You do not have permission to access this resource',
+              },
+            },
+            403,
+          );
+        }
+        if (
+          u.pathname.startsWith('/api/analytics/') ||
+          u.pathname === '/api/pickups/available'
+        )
+          return reply({ summary: {}, monthly: [], items: [], pagination });
+        return null;
+      };
+      mount('/dashboard/donor/donations/new');
+      fireEvent.submit(
+        await screen.findByRole('form', { name: 'Create donation' }),
+      );
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Only donor accounts can create or edit donations',
+      );
+      expect(screen.getByRole('alert')).toHaveTextContent('may have changed');
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh account' }));
+      await waitFor(() =>
+        expect(
+          screen.queryByRole('form', { name: 'Create donation' }),
+        ).not.toBeInTheDocument(),
+      );
+      expect(
+        await within(
+          await screen.findByRole('navigation', {
+            name: 'Dashboard navigation',
+          }),
+        ).findByRole('link', {
+          name: role === 'ngo' ? 'Explore donations' : 'Available pickups',
+          exact: true,
+        }),
+      ).toHaveAttribute(
+        'href',
+        `/dashboard/${role}/${role === 'ngo' ? 'explore' : 'pickups/available'}`,
+      );
+      expect(
+        fetch.mock.calls.filter(
+          ([url, o]) => url === '/api/donations' && o.method === 'POST',
+        ),
+      ).toHaveLength(1);
+    },
+  );
+  it('keeps CSRF errors distinct from role and verification guidance', async () => {
+    extra = (u, o) =>
+      u.pathname === '/api/donations' && o.method === 'POST'
+        ? reply(
+            {
+              error: {
+                message: 'Request origin or CSRF protection is invalid',
+              },
+            },
+            403,
+          )
+        : null;
+    mount('/dashboard/donor/donations/new');
+    fireEvent.submit(
+      await screen.findByRole('form', { name: 'Create donation' }),
+    );
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Request origin or CSRF protection is invalid',
+    );
+    expect(
+      screen.queryByRole('button', { name: 'Refresh account' }),
+    ).not.toBeInTheDocument();
+  });
   it('keeps a saved donation when its optional image upload fails', async () => {
     extra = (u, o) =>
       u.pathname === '/api/donations' && o.method === 'POST'
