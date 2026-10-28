@@ -108,7 +108,7 @@ export default function DashboardPage() {
               ['Available pickups', 'pickups/available', Truck],
               ['My assignments', 'pickups', History],
             ]
-          : [];
+          : [['Account verification', 'verifications', HandHeart]];
   function closeDrawer() {
     dialog.current?.close();
     setDrawer(false);

@@ -7,8 +7,17 @@ import { User } from '../src/models/User.js';
 import { passwordSchema, validate } from '../src/utils/validation.js';
 async function bootstrap() {
   const config = parseEnvironment();
-  if (config.NODE_ENV !== 'development')
-    throw new HttpError(400, 'Admin bootstrap is development-only');
+  if (
+    config.NODE_ENV !== 'development' &&
+    !(
+      config.NODE_ENV === 'production' &&
+      process.argv.includes('--allow-production')
+    )
+  )
+    throw new HttpError(
+      400,
+      'Admin bootstrap is development-only unless production is explicitly authorized with --allow-production',
+    );
   if (!config.MONGODB_URI) throw new HttpError(400, 'MONGODB_URI is required');
   const input = validate(
     z.object({

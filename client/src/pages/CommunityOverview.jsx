@@ -46,7 +46,7 @@ function Metric({ label, value, hint, icon: Icon }) {
   );
 }
 function Welcome({ volunteer }) {
-  const { user } = useAuth();
+  const { user, retry } = useAuth();
   return (
     <>
       <div className="donor-welcome">
@@ -94,9 +94,12 @@ function Welcome({ volunteer }) {
               ? 'Your account is verified. Claim an available pickup when you can make the collection.'
               : 'Your organization is verified. Request food that suits your community.'
             : volunteer
-              ? 'Browse your workspace while verification is pending. Only verified volunteers can browse and claim available pickups.'
-              : 'You can explore food now. Only verified NGOs can request food; account verification is managed by the platform administrator.'}
+              ? 'An administrator must approve your account. Contact the platform administrator for identity and eligibility review. Only verified volunteers can browse and claim available pickups.'
+              : 'You can explore food now. Contact the platform administrator for organization review. Only verified NGOs can request food; an administrator must approve your account.'}
         </p>
+        <button className="text-link" onClick={retry}>
+          Refresh verification status
+        </button>
         <Link to={`/dashboard/${user.role}#profile`}>
           Account details <ArrowUpRight size={14} />
         </Link>

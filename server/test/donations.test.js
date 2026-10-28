@@ -2226,7 +2226,9 @@ describe('complete end-to-end donor -> NGO -> volunteer lifecycle', () => {
     );
     const catalogRes = await call('get', '/api/donations', 'ngo');
     expect(catalogRes.status).toBe(200);
-    expect(catalogRes.body.items.some((item) => item._id === donationId)).toBe(true);
+    expect(catalogRes.body.items.some((item) => item._id === donationId)).toBe(
+      true,
+    );
 
     const geoRes = await call(
       'get',
@@ -2234,7 +2236,9 @@ describe('complete end-to-end donor -> NGO -> volunteer lifecycle', () => {
       'ngo',
     );
     expect(geoRes.status).toBe(200);
-    expect(geoRes.body.items.some((item) => item._id === donationId)).toBe(true);
+    expect(geoRes.body.items.some((item) => item._id === donationId)).toBe(
+      true,
+    );
 
     // 4. NGO reserves / requests the donation
     const reqRes = await submit(donationId, 'ngo', 6);
@@ -2249,42 +2253,84 @@ describe('complete end-to-end donor -> NGO -> volunteer lifecycle', () => {
     await inventory(donationId, 4, 6);
 
     // 6. NGO arranges volunteer pickup
-    const arrangeRes = await call('post', `/api/requests/${requestId}/pickup`, 'ngo');
+    const arrangeRes = await call(
+      'post',
+      `/api/requests/${requestId}/pickup`,
+      'ngo',
+    );
     expect(arrangeRes.status).toBe(201);
     expect(arrangeRes.body.assignment.status).toBe('awaiting_volunteer');
 
     // 7. Pending volunteer cannot browse or claim pickups
-    expect((await call('get', '/api/pickups/available', 'volunteer')).status).toBe(403);
-    expect((await call('post', `/api/pickups/${requestId}/claim`, 'volunteer')).status).toBe(403);
+    expect(
+      (await call('get', '/api/pickups/available', 'volunteer')).status,
+    ).toBe(403);
+    expect(
+      (await call('post', `/api/pickups/${requestId}/claim`, 'volunteer'))
+        .status,
+    ).toBe(403);
 
-    // 8. Admin verifies volunteer -> pickup task becomes discoverable
-    await User.updateOne(
-      { _id: actors.volunteer._id },
-      { $set: { verificationStatus: 'verified' } },
+    // 8. Admin verifies volunteer through the protected review API.
+    expect(
+      (
+        await call(
+          'patch',
+          `/api/admin/verifications/${actors.volunteer._id}`,
+          'admin',
+          {
+            status: 'verified',
+            previousStatus: 'pending',
+          },
+        )
+      ).status,
+    ).toBe(200);
+    const availableRes = await call(
+      'get',
+      '/api/pickups/available',
+      'volunteer',
     );
-    const availableRes = await call('get', '/api/pickups/available', 'volunteer');
     expect(availableRes.status).toBe(200);
     expect(availableRes.body.items.some((p) => p._id === requestId)).toBe(true);
 
     // 9. Verified volunteer claims the pickup
-    const claimRes = await call('post', `/api/pickups/${requestId}/claim`, 'volunteer');
+    const claimRes = await call(
+      'post',
+      `/api/pickups/${requestId}/claim`,
+      'volunteer',
+    );
     expect(claimRes.status).toBe(200);
     expect(claimRes.body.assignment.status).toBe('assigned');
 
     // 10. Relevant dashboards reflect updated state
     const volMine = await call('get', '/api/pickups/mine', 'volunteer');
-    expect(volMine.body.items.some((p) => p._id === requestId && p.status === 'assigned')).toBe(true);
+    expect(
+      volMine.body.items.some(
+        (p) => p._id === requestId && p.status === 'assigned',
+      ),
+    ).toBe(true);
 
     const ngoRequests = await call('get', '/api/requests', 'ngo');
-    expect(ngoRequests.body.items.some((r) => r._id === requestId && r.pickup?.status === 'assigned')).toBe(true);
+    expect(
+      ngoRequests.body.items.some(
+        (r) => r._id === requestId && r.pickup?.status === 'assigned',
+      ),
+    ).toBe(true);
 
     const donorRequests = await call('get', '/api/requests', 'donor');
-    expect(donorRequests.body.items.some((r) => r._id === requestId && r.status === 'accepted')).toBe(true);
+    expect(
+      donorRequests.body.items.some(
+        (r) => r._id === requestId && r.status === 'accepted',
+      ),
+    ).toBe(true);
 
     // 11. Complete the handover and delivery lifecycle
-    expect((await pickupAction(requestId, 'volunteer', 'start')).status).toBe(200);
+    expect((await pickupAction(requestId, 'volunteer', 'start')).status).toBe(
+      200,
+    );
     expect((await action(requestId, 'handover', 'donor')).status).toBe(200);
-    expect((await pickupAction(requestId, 'volunteer', 'arrive')).status).toBe(200);
+    expect((await pickupAction(requestId, 'volunteer', 'arrive')).status).toBe(
+      200,
+    );
     expect((await action(requestId, 'receive', 'ngo')).status).toBe(200);
 
     // 12. Final state verification
@@ -2295,3 +2341,95 @@ describe('complete end-to-end donor -> NGO -> volunteer lifecycle', () => {
   });
 });
 
+describe('administrator account verification', () => {
+  it('restricts review to admins, lists pending accounts, approves and rejects with fresh session visibility', async () => {
+    expect(
+      (await call('get', '/api/admin/verifications', 'volunteer')).status,
+    ).toBe(403);
+    expect((await call('get', '/api/admin/verifications', null)).status).toBe(
+      401,
+    );
+    const queue = await call('get', '/api/admin/verifications', 'admin');
+    expect(queue.status).toBe(200);
+    expect(queue.body.items.map((u) => u._id).sort()).toEqual(
+      [String(actors.pending._id), String(actors.volunteer._id)].sort(),
+    );
+    expect(JSON.stringify(queue.body)).not.toMatch(/passwordHash|tokenVersion/);
+    const path = `/api/admin/verifications/${actors.volunteer._id}`;
+    expect(
+      (
+        await call('patch', path, 'volunteer', {
+          status: 'verified',
+          previousStatus: 'pending',
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await call('patch', path, 'admin', {
+          status: 'verified',
+          previousStatus: 'pending',
+          role: 'admin',
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await call('patch', path, 'admin', {
+          status: 'verified',
+          previousStatus: 'pending',
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (await call('get', '/api/auth/me', 'volunteer')).body.user
+        .verificationStatus,
+    ).toBe('verified');
+    expect(
+      (await call('get', '/api/pickups/available', 'volunteer')).status,
+    ).toBe(200);
+    expect(
+      (
+        await call('patch', path, 'admin', {
+          status: 'rejected',
+          previousStatus: 'pending',
+        })
+      ).status,
+    ).toBe(409);
+    expect(
+      (
+        await call('patch', path, 'admin', {
+          status: 'rejected',
+          previousStatus: 'verified',
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (await call('get', '/api/pickups/available', 'volunteer')).status,
+    ).toBe(403);
+    expect(
+      (
+        await call(
+          'patch',
+          `/api/admin/verifications/${actors.admin._id}`,
+          'admin',
+          { status: 'rejected', previousStatus: 'verified' },
+        )
+      ).status,
+    ).toBe(409);
+    expect(
+      (
+        await call(
+          'patch',
+          `/api/admin/verifications/${actors.pending._id}`,
+          'admin',
+          { status: 'verified', previousStatus: 'pending' },
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      (await call('get', '/api/auth/me', 'pending')).body.user
+        .verificationStatus,
+    ).toBe('verified');
+  });
+});

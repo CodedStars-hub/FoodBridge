@@ -1,3 +1,4 @@
+import { createAdminRoutes } from './routes/adminRoutes.js';
 import express from 'express';
 import { trustedProxy } from './config/proxy.js';
 import { createLogger } from './utils/logger.js';
@@ -71,6 +72,7 @@ export function createApp(
     ['/api/pickups', createPickupRoutes(config)],
     ['/api/notifications', createNotificationRoutes(config)],
     ['/api/analytics', createAnalyticsRoutes(config)],
+    ['/api/admin', createAdminRoutes(config)],
   ]) {
     app.use(
       path,

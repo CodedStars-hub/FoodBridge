@@ -280,6 +280,11 @@ describe('Phase 4 NGO workspace', () => {
     ).toBeInTheDocument();
     checkMetric('Total requests', '0');
     expect(screen.queryByText(food.title)).not.toBeInTheDocument();
+    actor = { ...ngo, verificationStatus: 'verified' };
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Refresh verification status' }),
+    );
+    await screen.findByText(/Your organization is verified/);
   });
   it('keeps missing analytics distinct from zero and supports retry', async () => {
     let failed = true;

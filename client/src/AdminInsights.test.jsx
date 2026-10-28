@@ -106,7 +106,7 @@ describe('Phase 5 admin overview', () => {
     mount(<AdminOverview />);
     await screen.findByText('Registered users');
     expect(
-      screen.getByText(/A pending-verification count, review queue/),
+      screen.getByRole('link', { name: 'Review NGO and volunteer accounts' }),
     ).toBeInTheDocument();
     expect(screen.getByText(/Individual account search/)).toBeInTheDocument();
     expect(
@@ -175,8 +175,8 @@ describe('Phase 5 admin overview', () => {
     for (const name of ['Overview', 'Analytics', 'Notifications', 'My profile'])
       expect(within(nav).getByRole('link', { name })).toBeInTheDocument();
     expect(
-      within(nav).queryByRole('link', { name: /verification|manage users/i }),
-    ).not.toBeInTheDocument();
+      within(nav).getByRole('link', { name: 'Account verification' }),
+    ).toBeInTheDocument();
     expect(screen.getByRole('form', { name: 'Profile' })).toBeInTheDocument();
     expect(screen.queryByLabelText('Role')).not.toBeInTheDocument();
   });

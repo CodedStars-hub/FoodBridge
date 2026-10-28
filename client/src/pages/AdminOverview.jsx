@@ -171,13 +171,11 @@ export default function AdminOverview() {
         <div>
           <article>
             <h3>Organization verification</h3>
-            <span className="admin-unavailable">
-              Managed outside this workspace
-            </span>
+            <Link className="text-link" to="/dashboard/admin/verifications">
+              Review NGO and volunteer accounts
+            </Link>
             <p>
-              A pending-verification count, review queue and approval or
-              rejection controls are not available here. Verification continues
-              through the existing trusted operator process.
+              Review pending accounts and approve or reject their eligibility.
             </p>
           </article>
           <article>

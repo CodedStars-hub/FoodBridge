@@ -1,3 +1,4 @@
+import AdminVerifications from './pages/AdminVerifications.jsx';
 import { lazy, Suspense } from 'react';
 import NotificationsPage from './pages/NotificationsPage.jsx';
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage.jsx'));
@@ -50,6 +51,9 @@ export default function App() {
                   </Suspense>
                 }
               />
+              {role === 'admin' && (
+                <Route path="verifications" element={<AdminVerifications />} />
+              )}
               <Route path="notifications" element={<NotificationsPage />} />
               {role === 'donor' && (
                 <>

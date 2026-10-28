@@ -306,8 +306,10 @@ export default function PickupsPage({ available = false }) {
             <h2>Verification opens the way.</h2>
             <p>
               Only verified volunteers can browse and claim available
-              assignments. You can still review your profile and existing
-              assignment history.
+              assignments. An administrator must approve your account. Contact
+              the platform administrator for identity and eligibility review,
+              then reload this page to refresh your status. You can still review
+              your profile and existing assignment history.
             </p>
             <Link className="text-link" to="/dashboard/volunteer#profile">
               Review your profile
