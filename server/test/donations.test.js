@@ -2189,3 +2189,109 @@ describe('production hardening integration', () => {
     });
   });
 });
+
+describe('complete end-to-end donor -> NGO -> volunteer lifecycle', () => {
+  it('steps through donation creation, persistence, NGO discovery, reservation, volunteer verification gate, claim, and dashboard synchronization', async () => {
+    // 1. Donor creates an eligible donation with location coordinates
+    const createRes = await call(
+      'post',
+      '/api/donations',
+      'donor',
+      payload({
+        quantity: 10,
+        pickupDeadline: new Date(Date.now() + 86400000).toISOString(),
+        location: point(77.5946, 12.9716),
+      }),
+    );
+    expect(createRes.status).toBe(201);
+    const donationId = createRes.body.donation._id;
+
+    // 2. Donation is persisted in MongoDB with status 'available' and future deadline
+    const persisted = await Donation.findById(donationId);
+    expect(persisted).toBeTruthy();
+    expect(persisted.status).toBe('available');
+    expect(persisted.remainingQuantity).toBe(10);
+    expect(persisted.location.coordinates).toEqual([77.5946, 12.9716]);
+
+    // 3. Verified NGO discovers the donation (both general catalogue and geospatial discovery)
+    await User.updateOne(
+      { _id: actors.ngo._id },
+      {
+        $set: {
+          verificationStatus: 'verified',
+          location: point(77.6, 12.98),
+          address: 'Verified Community Kitchen, Bangalore',
+        },
+      },
+    );
+    const catalogRes = await call('get', '/api/donations', 'ngo');
+    expect(catalogRes.status).toBe(200);
+    expect(catalogRes.body.items.some((item) => item._id === donationId)).toBe(true);
+
+    const geoRes = await call(
+      'get',
+      '/api/donations/nearby?longitude=77.6&latitude=12.98&radiusKm=10',
+      'ngo',
+    );
+    expect(geoRes.status).toBe(200);
+    expect(geoRes.body.items.some((item) => item._id === donationId)).toBe(true);
+
+    // 4. NGO reserves / requests the donation
+    const reqRes = await submit(donationId, 'ngo', 6);
+    expect(reqRes.status).toBe(201);
+    const requestId = reqRes.body.request._id;
+    expect(reqRes.body.request.status).toBe('pending');
+    expect(reqRes.body.request.requestedQuantity).toBe(6);
+
+    // 5. Donor accepts request -> inventory is reserved
+    const acceptRes = await action(requestId, 'accept', 'donor');
+    expect(acceptRes.status).toBe(200);
+    await inventory(donationId, 4, 6);
+
+    // 6. NGO arranges volunteer pickup
+    const arrangeRes = await call('post', `/api/requests/${requestId}/pickup`, 'ngo');
+    expect(arrangeRes.status).toBe(201);
+    expect(arrangeRes.body.assignment.status).toBe('awaiting_volunteer');
+
+    // 7. Pending volunteer cannot browse or claim pickups
+    expect((await call('get', '/api/pickups/available', 'volunteer')).status).toBe(403);
+    expect((await call('post', `/api/pickups/${requestId}/claim`, 'volunteer')).status).toBe(403);
+
+    // 8. Admin verifies volunteer -> pickup task becomes discoverable
+    await User.updateOne(
+      { _id: actors.volunteer._id },
+      { $set: { verificationStatus: 'verified' } },
+    );
+    const availableRes = await call('get', '/api/pickups/available', 'volunteer');
+    expect(availableRes.status).toBe(200);
+    expect(availableRes.body.items.some((p) => p._id === requestId)).toBe(true);
+
+    // 9. Verified volunteer claims the pickup
+    const claimRes = await call('post', `/api/pickups/${requestId}/claim`, 'volunteer');
+    expect(claimRes.status).toBe(200);
+    expect(claimRes.body.assignment.status).toBe('assigned');
+
+    // 10. Relevant dashboards reflect updated state
+    const volMine = await call('get', '/api/pickups/mine', 'volunteer');
+    expect(volMine.body.items.some((p) => p._id === requestId && p.status === 'assigned')).toBe(true);
+
+    const ngoRequests = await call('get', '/api/requests', 'ngo');
+    expect(ngoRequests.body.items.some((r) => r._id === requestId && r.pickup?.status === 'assigned')).toBe(true);
+
+    const donorRequests = await call('get', '/api/requests', 'donor');
+    expect(donorRequests.body.items.some((r) => r._id === requestId && r.status === 'accepted')).toBe(true);
+
+    // 11. Complete the handover and delivery lifecycle
+    expect((await pickupAction(requestId, 'volunteer', 'start')).status).toBe(200);
+    expect((await action(requestId, 'handover', 'donor')).status).toBe(200);
+    expect((await pickupAction(requestId, 'volunteer', 'arrive')).status).toBe(200);
+    expect((await action(requestId, 'receive', 'ngo')).status).toBe(200);
+
+    // 12. Final state verification
+    await inventory(donationId, 4, 0, 6);
+    const finalRequest = await DonationRequest.findById(requestId);
+    expect(finalRequest.status).toBe('completed');
+    expect(finalRequest.pickup.status).toBe('delivered');
+  });
+});
+
