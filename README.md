@@ -2,7 +2,6 @@
 
 <div align="center">
 
-<img src="docs/assets/foodbridge-logo.png" alt="FoodBridge Logo" width="460" onerror="this.style.display='none'" />
 
 # FoodBridge — Intelligent Surplus Food Redistribution
 
