@@ -33,8 +33,8 @@ function DonationForm({ donation }) {
     setError('');
     setRefreshSession(false);
     setFields({});
-    const input = Object.fromEntries(new FormData(event.currentTarget));
     try {
+      const input = Object.fromEntries(new FormData(event.currentTarget));
       input.quantity = Number(input.quantity);
       input.preparationTime = new Date(input.preparationTime).toISOString();
       input.pickupDeadline = new Date(input.pickupDeadline).toISOString();
@@ -57,6 +57,7 @@ function DonationForm({ donation }) {
           await api(`/donations/${data.donation._id}/image`, {
             method: 'POST',
             body,
+            timeoutMs: 45000,
           });
         } catch (failure) {
           imageError = failure.message;

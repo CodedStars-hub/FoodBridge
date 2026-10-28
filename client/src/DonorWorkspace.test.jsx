@@ -489,6 +489,9 @@ describe('donor operational workspace', () => {
       'Request origin or CSRF protection is invalid',
     );
     expect(
+      screen.getByRole('button', { name: 'Publish donation' }),
+    ).toBeEnabled();
+    expect(
       screen.queryByRole('button', { name: 'Refresh account' }),
     ).not.toBeInTheDocument();
   });

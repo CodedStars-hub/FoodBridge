@@ -118,6 +118,7 @@ export async function replaceImage(donation, file, config) {
   const buffer = await validateImage(file);
   const publicId = `foodbridge/donations/${donation._id}/${randomUUID()}`;
   await queue(publicId);
+  // Persist cleanup for the runtime worker; provider deletion must not delay uploads.
   let image;
   try {
     const result = await uploadCloudImage(buffer, publicId, config);
@@ -140,7 +141,6 @@ export async function replaceImage(donation, file, config) {
       { publicId },
       { $set: { readyAfter: new Date() } },
     );
-    await cleanupImages(config, publicId).catch(() => {});
     throw new HttpError(
       502,
       'Image service unavailable. The existing donation image was preserved; please retry',
@@ -165,7 +165,6 @@ export async function replaceImage(donation, file, config) {
         { publicId: donation.image.publicId },
         { $set: { readyAfter: new Date() } },
       ).catch(() => {});
-      await cleanupImages(config, donation.image.publicId).catch(() => {});
     }
     return updated;
   } catch (error) {
@@ -173,7 +172,6 @@ export async function replaceImage(donation, file, config) {
       { publicId },
       { $set: { readyAfter: new Date() } },
     ).catch(() => {});
-    await cleanupImages(config, publicId).catch(() => {});
     if (error instanceof HttpError) throw error;
     throw new HttpError(
       503,

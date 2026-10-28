@@ -2025,13 +2025,18 @@ describe('authenticated managed image uploads with isolated Cloudinary adapter',
     );
     await inventory(d._id, 10, 0);
   });
-  it('replaces images and deletes only the prior server-owned asset', async () => {
+  it('replaces images without waiting for cleanup and later deletes only the prior asset', async () => {
     configureImageProvider();
     const d = await donation();
     const first = await imageRequest(d._id, { buffer: await png() });
     const second = await imageRequest(d._id, { buffer: await png() });
     expect(second.status).toBe(200);
     expect(second.body.image.publicId).not.toBe(first.body.image.publicId);
+    expect(cloudClient.destroyCloudImage).not.toHaveBeenCalled();
+    expect(
+      await ImageCleanupTask.exists({ publicId: first.body.image.publicId }),
+    ).toBeTruthy();
+    await cleanupImages(imageConfig);
     expect(cloudClient.destroyCloudImage).toHaveBeenCalledWith(
       first.body.image.publicId,
       imageConfig,
