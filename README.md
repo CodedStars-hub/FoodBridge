@@ -24,7 +24,7 @@ _An enterprise MERN-stack platform featuring ACID transactional reservations, ex
 
 <br />
 
-> 🚀 **[Launch Live App](https://food-bridge-2jwl.vercel.app/)** · 💻 **[GitHub Repository](https://github.com/CodedStars-hub/FoodBridge)** · 🏗️ **[System Architecture](#e-system-architecture)** · ⚡ **[Quick Start](#n-quick-start)**  
+> 🚀 **[Launch Live App](https://food-bridge-2jwl.vercel.app/)** · 📹 **[Watch Demo Video](https://drive.google.com/file/d/11nMJ3WroIEbdgF13avGs0MUHQdxiAmd5/view?usp=sharing)** · 💻 **[GitHub Repository](https://github.com/CodedStars-hub/FoodBridge)** · 🏗️ **[System Architecture](#e-system-architecture)** · ⚡ **[Quick Start](#n-quick-start)**  
 > ⚡ **Verified Backend API Readiness**: **[`foodbridge-u7qa.onrender.com/api/health/ready`](https://foodbridge-u7qa.onrender.com/api/health/ready)**
 
 <br />
@@ -713,6 +713,9 @@ FoodBridge is deployed across production cloud infrastructure engineered for hig
 
 **[Launch Live Application (Vercel)](https://food-bridge-2jwl.vercel.app/)**  
 _The complete responsive single-page web application._
+
+**[Watch Production Demonstration Video (Google Drive)](https://drive.google.com/file/d/11nMJ3WroIEbdgF13avGs0MUHQdxiAmd5/view?usp=sharing)**  
+_Full video walk-through demonstrating the live application, user roles, and surplus food redistribution workflow._
 
 **[Backend API Service (Render)](https://foodbridge-u7qa.onrender.com/)**  
 _Persistent Node.js + Express + Socket.IO API server._
